@@ -211,17 +211,6 @@ WEATHER_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"
 
 ---
 
-## 📞 Contacts
-
-| Task | Person |
-|---|---|
-| GPS / Location integration | Priyanshu |
-| Sarvam TTS voice output | Priyanshu |
-| Backend DB / server | Team discussion |
-| Model training (2L+ dataset) | You |
-
----
-
 ## 🏛️ Disease Classes Supported (38)
 
 <details>
