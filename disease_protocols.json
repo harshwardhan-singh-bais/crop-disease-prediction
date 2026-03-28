@@ -1,0 +1,724 @@
+{
+  "class_names": [
+    "Apple___Apple_scab",
+    "Apple___Black_rot",
+    "Apple___Cedar_apple_rust",
+    "Apple___healthy",
+    "Blueberry___healthy",
+    "Cherry_(including_sour)___Powdery_mildew",
+    "Cherry_(including_sour)___healthy",
+    "Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot",
+    "Corn_(maize)___Common_rust_",
+    "Corn_(maize)___Northern_Leaf_Blight",
+    "Corn_(maize)___healthy",
+    "Grape___Black_rot",
+    "Grape___Esca_(Black_Measles)",
+    "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)",
+    "Grape___healthy",
+    "Orange___Haunglongbing_(Citrus_greening)",
+    "Peach___Bacterial_spot",
+    "Peach___healthy",
+    "Pepper,_bell___Bacterial_spot",
+    "Pepper,_bell___healthy",
+    "Potato___Early_blight",
+    "Potato___Late_blight",
+    "Potato___healthy",
+    "Raspberry___healthy",
+    "Soybean___healthy",
+    "Squash___Powdery_mildew",
+    "Strawberry___Leaf_scorch",
+    "Strawberry___healthy",
+    "Tomato___Bacterial_spot",
+    "Tomato___Early_blight",
+    "Tomato___Late_blight",
+    "Tomato___Leaf_Mold",
+    "Tomato___Septoria_leaf_spot",
+    "Tomato___Spider_mites Two-spotted_spider_mite",
+    "Tomato___Target_Spot",
+    "Tomato___Tomato_Yellow_Leaf_Curl_Virus",
+    "Tomato___Tomato_mosaic_virus",
+    "Tomato___healthy"
+  ],
+  "protocols": {
+    "Apple___Apple_scab": {
+      "display_name": "Apple Scab (Venturia inaequalis)",
+      "crop": "Apple",
+      "first_aid": "Remove and destroy infected leaves immediately. Do NOT compost infected material. Apply copper-based fungicide spray within 24 hours.",
+      "action_plan": [
+        "Step 1: Remove all visibly infected leaves and fruits from the tree",
+        "Step 2: Spray Captan or Mancozeb fungicide (2g/L water) every 7–10 days",
+        "Step 3: Improve air circulation by pruning dense branches",
+        "Step 4: Avoid overhead watering — switch to drip irrigation",
+        "Step 5: After harvest, rake and burn all fallen leaves",
+        "Step 6: Apply dormant copper spray before next season bud break"
+      ],
+      "yield_loss_pct": 40,
+      "economic_loss_per_acre_rs": 25000,
+      "marketplace": {
+        "recommended_products": ["Captan 50 WP", "Mancozeb 75 WP", "Copper Oxychloride 50 WP"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Apple___Black_rot": {
+      "display_name": "Apple Black Rot (Botryosphaeria obtusa)",
+      "crop": "Apple",
+      "first_aid": "Immediately prune and burn all infected branches and mummified fruits. Apply thiophanate-methyl fungicide.",
+      "action_plan": [
+        "Step 1: Prune all dead wood and cankers with sterilized tools",
+        "Step 2: Remove all mummified fruits still hanging on tree",
+        "Step 3: Apply Thiophanate-methyl (1.5g/L) spray every 10 days",
+        "Step 4: Ensure proper fertilization — avoid high nitrogen",
+        "Step 5: Monitor for fire blight as secondary infection risk",
+        "Step 6: Apply bordeaux mixture as protective winter spray"
+      ],
+      "yield_loss_pct": 50,
+      "economic_loss_per_acre_rs": 32000,
+      "marketplace": {
+        "recommended_products": ["Thiophanate-methyl 70 WP", "Captan 50 WP", "Bordeaux Mixture"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Apple___Cedar_apple_rust": {
+      "display_name": "Cedar Apple Rust (Gymnosporangium juniperi-virginianae)",
+      "crop": "Apple",
+      "first_aid": "Apply myclobutanil fungicide immediately. Remove nearby juniper/cedar trees which are alternate hosts.",
+      "action_plan": [
+        "Step 1: Spray Myclobutanil (Nova) at first sign of orange spore masses",
+        "Step 2: Identify and remove nearby red cedar / juniper trees if possible",
+        "Step 3: Apply fungicide every 7–10 days during wet spring weather",
+        "Step 4: Plant resistant apple varieties in future",
+        "Step 5: Monitor weather — rust spreads rapidly during rainy periods"
+      ],
+      "yield_loss_pct": 30,
+      "economic_loss_per_acre_rs": 18000,
+      "marketplace": {
+        "recommended_products": ["Myclobutanil 10 WP", "Propiconazole EC", "Trifloxystrobin"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Apple___healthy": {
+      "display_name": "Healthy Apple Leaf",
+      "crop": "Apple",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue regular monitoring (weekly inspection)",
+        "Maintain proper irrigation and fertilization schedule",
+        "Apply preventive copper spray before monsoon season",
+        "Prune for good air circulation annually"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["NPK Fertilizer", "Neem Oil (preventive)"],
+        "product_type": "Preventive"
+      }
+    },
+    "Blueberry___healthy": {
+      "display_name": "Healthy Blueberry",
+      "crop": "Blueberry",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Maintain soil pH between 4.5–5.5 for optimal growth",
+        "Continue regular monitoring and preventive sprays",
+        "Ensure proper mulching to retain moisture"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["Sulfur Dust (preventive)", "Acidic Fertilizer"],
+        "product_type": "Preventive"
+      }
+    },
+    "Cherry_(including_sour)___Powdery_mildew": {
+      "display_name": "Cherry Powdery Mildew (Podosphaera clandestina)",
+      "crop": "Cherry",
+      "first_aid": "Spray potassium bicarbonate or sulfur-based fungicide immediately. Remove heavily infected shoots.",
+      "action_plan": [
+        "Step 1: Remove and destroy heavily infected shoots and leaves",
+        "Step 2: Apply Wettable Sulfur (2g/L) or Potassium Bicarbonate spray",
+        "Step 3: Avoid excessive nitrogen fertilization — promotes soft tissue",
+        "Step 4: Improve air circulation through pruning",
+        "Step 5: Apply spray every 7 days during dry, warm weather",
+        "Step 6: Use resistant varieties in future plantings"
+      ],
+      "yield_loss_pct": 25,
+      "economic_loss_per_acre_rs": 15000,
+      "marketplace": {
+        "recommended_products": ["Wettable Sulfur 80 WP", "Potassium Bicarbonate", "Trifloxystrobin"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Cherry_(including_sour)___healthy": {
+      "display_name": "Healthy Cherry",
+      "crop": "Cherry",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue weekly monitoring",
+        "Apply preventive sulfur spray before flowering",
+        "Maintain proper pruning for air circulation"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["Neem Oil", "Copper Hydroxide (preventive)"],
+        "product_type": "Preventive"
+      }
+    },
+    "Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot": {
+      "display_name": "Maize Gray Leaf Spot (Cercospora zeae-maydis)",
+      "crop": "Maize (Corn)",
+      "first_aid": "Apply azoxystrobin or pyraclostrobin fungicide immediately. Ensure proper field drainage.",
+      "action_plan": [
+        "Step 1: Apply Azoxystrobin (Amistar) at first lesion appearance",
+        "Step 2: Ensure proper crop rotation — avoid continuous corn planting",
+        "Step 3: Improve field drainage to reduce leaf wetness duration",
+        "Step 4: Use resistant hybrid varieties next season",
+        "Step 5: Apply fungicide at V6 and VT growth stages",
+        "Step 6: Destroy infected crop residue after harvest"
+      ],
+      "yield_loss_pct": 35,
+      "economic_loss_per_acre_rs": 12000,
+      "marketplace": {
+        "recommended_products": ["Azoxystrobin 23 SC", "Pyraclostrobin 20 EC", "Propiconazole 25 EC"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Corn_(maize)___Common_rust_": {
+      "display_name": "Maize Common Rust (Puccinia sorghi)",
+      "crop": "Maize (Corn)",
+      "first_aid": "Apply propiconazole or mancozeb fungicide. Rust spreads fast — act within 24 hours of detection.",
+      "action_plan": [
+        "Step 1: Apply Propiconazole (Tilt) fungicide immediately at 1ml/L",
+        "Step 2: Monitor field daily — rust spreads via wind spores rapidly",
+        "Step 3: Avoid late planting which increases rust pressure",
+        "Step 4: Use resistant hybrids (check ICAR recommendations)",
+        "Step 5: Apply second spray after 10 days if infection persists"
+      ],
+      "yield_loss_pct": 40,
+      "economic_loss_per_acre_rs": 14000,
+      "marketplace": {
+        "recommended_products": ["Propiconazole 25 EC (Tilt)", "Mancozeb 75 WP", "Tebuconazole 250 EC"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Corn_(maize)___Northern_Leaf_Blight": {
+      "display_name": "Maize Northern Leaf Blight (Exserohilum turcicum)",
+      "crop": "Maize (Corn)",
+      "first_aid": "Apply azoxystrobin fungicide. Cigar-shaped lesions indicate active infection — act fast.",
+      "action_plan": [
+        "Step 1: Apply Azoxystrobin + Propiconazole tank mix at first cigar lesion",
+        "Step 2: Ensure crop rotation with soybean or wheat next season",
+        "Step 3: Remove and destroy infected lower leaves",
+        "Step 4: Apply boron + zinc micronutrients to boost plant immunity",
+        "Step 5: Scout field every 3–4 days during monsoon season"
+      ],
+      "yield_loss_pct": 30,
+      "economic_loss_per_acre_rs": 11000,
+      "marketplace": {
+        "recommended_products": ["Azoxystrobin 23 SC", "Carbendazim 50 WP", "Propiconazole 25 EC"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Corn_(maize)___healthy": {
+      "display_name": "Healthy Maize",
+      "crop": "Maize (Corn)",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue monitoring every 3–4 days",
+        "Apply preventive fungicide at VT stage during monsoon",
+        "Ensure proper nitrogen management to avoid lush soft tissue"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["NPK 12-32-16 Fertilizer", "Zinc Sulphate"],
+        "product_type": "Preventive"
+      }
+    },
+    "Grape___Black_rot": {
+      "display_name": "Grape Black Rot (Guignardia bidwellii)",
+      "crop": "Grape",
+      "first_aid": "Apply Myclobutanil or Mancozeb immediately. Remove all mummified berries.",
+      "action_plan": [
+        "Step 1: Remove all mummified berries and infected clusters",
+        "Step 2: Apply Myclobutanil (Nova) 10 WP at 1g/L",
+        "Step 3: Spray every 7–10 days during wet weather",
+        "Step 4: Improve canopy management for better air circulation",
+        "Step 5: Apply dormant lime sulfur spray in winter",
+        "Step 6: Sanitize vineyard tools between rows"
+      ],
+      "yield_loss_pct": 60,
+      "economic_loss_per_acre_rs": 45000,
+      "marketplace": {
+        "recommended_products": ["Myclobutanil 10 WP", "Mancozeb 75 WP", "Captan 50 WP"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Grape___Esca_(Black_Measles)": {
+      "display_name": "Grape Esca / Black Measles (Wood Disease Complex)",
+      "crop": "Grape",
+      "first_aid": "No curative chemical exists. Remove and burn infected vines immediately to prevent spread.",
+      "action_plan": [
+        "Step 1: Mark and remove all symptomatic vines immediately",
+        "Step 2: Burn or deep-bury removed vines — do NOT compost",
+        "Step 3: Sterilize pruning tools with 70% alcohol between cuts",
+        "Step 4: Apply wound sealant after all pruning cuts",
+        "Step 5: Apply arsenite-free wood protectant on pruning wounds",
+        "Step 6: Replant with certified disease-free rootstock"
+      ],
+      "yield_loss_pct": 70,
+      "economic_loss_per_acre_rs": 60000,
+      "marketplace": {
+        "recommended_products": ["Wound Sealant Paste", "Thiophanate-methyl (wound protectant)", "Trichoderma-based biocontrol"],
+        "product_type": "Biocontrol + Wound treatment"
+      }
+    },
+    "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)": {
+      "display_name": "Grape Leaf Blight (Isariopsis Leaf Spot)",
+      "crop": "Grape",
+      "first_aid": "Apply copper-based fungicide. Remove infected leaves before spores spread.",
+      "action_plan": [
+        "Step 1: Remove all infected leaves showing angular brown spots",
+        "Step 2: Apply Copper Oxychloride (3g/L) spray",
+        "Step 3: Repeat spray after 10 days",
+        "Step 4: Improve drainage around vineyard",
+        "Step 5: Avoid overhead irrigation"
+      ],
+      "yield_loss_pct": 20,
+      "economic_loss_per_acre_rs": 12000,
+      "marketplace": {
+        "recommended_products": ["Copper Oxychloride 50 WP", "Mancozeb 75 WP"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Grape___healthy": {
+      "display_name": "Healthy Grape",
+      "crop": "Grape",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue weekly monitoring",
+        "Apply preventive bordeaux mixture before monsoon",
+        "Maintain proper canopy management"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["Bordeaux Mixture", "NPK Fertilizer for Grapes"],
+        "product_type": "Preventive"
+      }
+    },
+    "Orange___Haunglongbing_(Citrus_greening)": {
+      "display_name": "Citrus Greening / HLB (Candidatus Liberibacter asiaticus)",
+      "crop": "Orange / Citrus",
+      "first_aid": "No cure. Remove infected trees IMMEDIATELY to prevent spread via psyllid insects. Contact your nearest Krishi Vigyan Kendra.",
+      "action_plan": [
+        "Step 1: Mark and remove infected trees IMMEDIATELY — no cure exists",
+        "Step 2: Control Asian Citrus Psyllid with imidacloprid spray (vector control)",
+        "Step 3: Do NOT plant new citrus within 50 meters",
+        "Step 4: Report to district agriculture office for quarantine assistance",
+        "Step 5: Apply reflective mulch to reduce psyllid landing",
+        "Step 6: Install yellow sticky traps for psyllid monitoring"
+      ],
+      "yield_loss_pct": 100,
+      "economic_loss_per_acre_rs": 80000,
+      "marketplace": {
+        "recommended_products": ["Imidacloprid 17.8 SL (psyllid control)", "Abamectin 1.8 EC", "Yellow Sticky Traps"],
+        "product_type": "Insecticide (vector control)"
+      }
+    },
+    "Peach___Bacterial_spot": {
+      "display_name": "Peach Bacterial Spot (Xanthomonas arboricola pv. pruni)",
+      "crop": "Peach",
+      "first_aid": "Apply copper hydroxide spray immediately. Prune infected shoots during dry weather only.",
+      "action_plan": [
+        "Step 1: Apply Copper Hydroxide (Kocide) at 1.5g/L during dry weather",
+        "Step 2: Prune infected twigs 15cm below last visible lesion",
+        "Step 3: Sterilize pruning tools between cuts",
+        "Step 4: Avoid overhead irrigation — switch to drip",
+        "Step 5: Apply oxytetracycline antibiotic spray (if legally permitted in region)",
+        "Step 6: Plant resistant varieties in future"
+      ],
+      "yield_loss_pct": 35,
+      "economic_loss_per_acre_rs": 22000,
+      "marketplace": {
+        "recommended_products": ["Copper Hydroxide 77 WP (Kocide)", "Streptomycin Sulfate", "Bordeaux Mixture"],
+        "product_type": "Bactericide + Fungicide"
+      }
+    },
+    "Peach___healthy": {
+      "display_name": "Healthy Peach",
+      "crop": "Peach",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue regular monitoring",
+        "Apply preventive copper spray before bud break",
+        "Thin fruits for better yield quality"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["Copper Hydroxide (preventive)", "Balanced NPK Fertilizer"],
+        "product_type": "Preventive"
+      }
+    },
+    "Pepper,_bell___Bacterial_spot": {
+      "display_name": "Bell Pepper Bacterial Spot (Xanthomonas campestris)",
+      "crop": "Bell Pepper",
+      "first_aid": "Remove infected plants. Apply copper-based bactericide immediately. Avoid working in wet fields.",
+      "action_plan": [
+        "Step 1: Remove and destroy heavily infected plants",
+        "Step 2: Apply Copper Oxychloride (3g/L) or Copper Hydroxide spray",
+        "Step 3: Rotate crops — avoid pepper/tomato on same land next season",
+        "Step 4: Use certified disease-free seeds",
+        "Step 5: Drench soil with Trichoderma viride for root protection",
+        "Step 6: Avoid overhead watering"
+      ],
+      "yield_loss_pct": 45,
+      "economic_loss_per_acre_rs": 18000,
+      "marketplace": {
+        "recommended_products": ["Copper Oxychloride 50 WP", "Copper Hydroxide 77 WP", "Bactericide Mix"],
+        "product_type": "Bactericide"
+      }
+    },
+    "Pepper,_bell___healthy": {
+      "display_name": "Healthy Bell Pepper",
+      "crop": "Bell Pepper",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue monitoring weekly",
+        "Apply preventive copper spray monthly",
+        "Maintain proper plant spacing for air circulation"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["NPK 19-19-19", "Neem Oil (preventive)"],
+        "product_type": "Preventive"
+      }
+    },
+    "Potato___Early_blight": {
+      "display_name": "Potato Early Blight (Alternaria solani)",
+      "crop": "Potato",
+      "first_aid": "Apply Mancozeb or Chlorothalonil fungicide immediately. Remove lower infected leaves.",
+      "action_plan": [
+        "Step 1: Remove all lower leaves with concentric ring spots",
+        "Step 2: Apply Mancozeb 75 WP (2.5g/L) spray",
+        "Step 3: Repeat spray every 7–10 days",
+        "Step 4: Ensure balanced potassium fertilization — K deficiency worsens blight",
+        "Step 5: Avoid stress conditions (drought/waterlogging)",
+        "Step 6: Use resistant varieties like Kufri Jyoti next season"
+      ],
+      "yield_loss_pct": 30,
+      "economic_loss_per_acre_rs": 8000,
+      "marketplace": {
+        "recommended_products": ["Mancozeb 75 WP", "Chlorothalonil 75 WP", "Azoxystrobin 23 SC"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Potato___Late_blight": {
+      "display_name": "Potato Late Blight (Phytophthora infestans) — HIGH PRIORITY",
+      "crop": "Potato",
+      "first_aid": "EMERGENCY: Late blight can destroy entire field in 3–5 days. Apply Metalaxyl + Mancozeb within 6 hours. Stop all irrigation immediately.",
+      "action_plan": [
+        "Step 1: STOP IRRIGATION IMMEDIATELY",
+        "Step 2: Apply Metalaxyl + Mancozeb (Ridomil Gold) at 2.5g/L IMMEDIATELY",
+        "Step 3: Remove and burn infected haulms — do NOT compost",
+        "Step 4: Spray entire field, not just infected patches",
+        "Step 5: Repeat spray every 5 days if wet weather continues",
+        "Step 6: Harvest early if >50% foliage infected",
+        "Step 7: Report to nearby Krishi Vigyan Kendra for emergency support"
+      ],
+      "yield_loss_pct": 75,
+      "economic_loss_per_acre_rs": 22000,
+      "marketplace": {
+        "recommended_products": ["Metalaxyl + Mancozeb (Ridomil Gold)", "Cymoxanil + Mancozeb (Curzate M8)", "Dimethomorph 50 WP"],
+        "product_type": "Systemic Fungicide — EMERGENCY"
+      }
+    },
+    "Potato___healthy": {
+      "display_name": "Healthy Potato",
+      "crop": "Potato",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue monitoring every 3–4 days during humid weather",
+        "Apply preventive Mancozeb spray before monsoon",
+        "Ensure proper earthing up and drainage"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["Mancozeb 75 WP (preventive)", "DAP Fertilizer"],
+        "product_type": "Preventive"
+      }
+    },
+    "Raspberry___healthy": {
+      "display_name": "Healthy Raspberry",
+      "crop": "Raspberry",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue weekly monitoring",
+        "Apply preventive copper spray in spring",
+        "Remove old canes after harvest"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["Copper Hydroxide (preventive)", "Organic Compost"],
+        "product_type": "Preventive"
+      }
+    },
+    "Soybean___healthy": {
+      "display_name": "Healthy Soybean",
+      "crop": "Soybean",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue monitoring for soybean rust (Phakopsora pachyrhizi)",
+        "Apply preventive fungicide at R1 (flowering) stage",
+        "Ensure proper rhizobium inoculation for nitrogen fixation"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["Rhizobium Inoculant", "Triazole Fungicide (preventive)"],
+        "product_type": "Preventive"
+      }
+    },
+    "Squash___Powdery_mildew": {
+      "display_name": "Squash Powdery Mildew (Podosphaera xanthii)",
+      "crop": "Squash / Cucurbit",
+      "first_aid": "Apply potassium bicarbonate or neem oil spray immediately. Remove worst infected leaves.",
+      "action_plan": [
+        "Step 1: Remove and destroy heavily infected leaves",
+        "Step 2: Apply Potassium Bicarbonate (5g/L) or Neem Oil (5ml/L) spray",
+        "Step 3: Avoid overhead watering in the evening",
+        "Step 4: Apply spray every 5–7 days",
+        "Step 5: Improve plant spacing for air circulation",
+        "Step 6: Apply sulfur dust in early morning in severe cases"
+      ],
+      "yield_loss_pct": 20,
+      "economic_loss_per_acre_rs": 6000,
+      "marketplace": {
+        "recommended_products": ["Wettable Sulfur 80 WP", "Potassium Bicarbonate", "Neem Oil 1500 PPM"],
+        "product_type": "Fungicide / Biopesticide"
+      }
+    },
+    "Strawberry___Leaf_scorch": {
+      "display_name": "Strawberry Leaf Scorch (Diplocarpon earlianum)",
+      "crop": "Strawberry",
+      "first_aid": "Remove infected leaves. Apply Captan or Myclobutanil fungicide spray.",
+      "action_plan": [
+        "Step 1: Remove all leaves showing purple/red spots with scorched edges",
+        "Step 2: Apply Captan 50 WP (2g/L) fungicide spray",
+        "Step 3: Mulch beds to prevent soil splash inoculation",
+        "Step 4: Avoid overhead irrigation",
+        "Step 5: Renovate plantings every 3 years to reduce inoculum buildup"
+      ],
+      "yield_loss_pct": 25,
+      "economic_loss_per_acre_rs": 14000,
+      "marketplace": {
+        "recommended_products": ["Captan 50 WP", "Myclobutanil 10 WP", "Thiram 75 WP"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Strawberry___healthy": {
+      "display_name": "Healthy Strawberry",
+      "crop": "Strawberry",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue monitoring weekly",
+        "Apply preventive Captan spray before flowering",
+        "Use clean certified runners for new plantings"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["Captan 50 WP (preventive)", "Strawberry-grade NPK"],
+        "product_type": "Preventive"
+      }
+    },
+    "Tomato___Bacterial_spot": {
+      "display_name": "Tomato Bacterial Spot (Xanthomonas perforans)",
+      "crop": "Tomato",
+      "first_aid": "Apply copper bactericide immediately. Remove infected leaves and improve ventilation.",
+      "action_plan": [
+        "Step 1: Remove all spotted leaves and water-soaked fruits",
+        "Step 2: Apply Copper Hydroxide (Kocide 3000) at 2g/L",
+        "Step 3: Alternate with Streptomycin Sulfate every 5 days",
+        "Step 4: Avoid working in wet fields to prevent spread",
+        "Step 5: Use drip irrigation only", 
+        "Step 6: Rotate crops next season"
+      ],
+      "yield_loss_pct": 40,
+      "economic_loss_per_acre_rs": 16000,
+      "marketplace": {
+        "recommended_products": ["Copper Hydroxide 77 WP", "Streptomycin + Copper mix", "Bactericide Combo Pack"],
+        "product_type": "Bactericide"
+      }
+    },
+    "Tomato___Early_blight": {
+      "display_name": "Tomato Early Blight (Alternaria solani)",
+      "crop": "Tomato",
+      "first_aid": "Apply Mancozeb or Chlorothalonil fungicide. Remove lower infected leaves immediately.",
+      "action_plan": [
+        "Step 1: Remove lower leaves showing bull's-eye lesions",
+        "Step 2: Apply Mancozeb 75 WP (2.5g/L) spray",
+        "Step 3: Mulch around plants to prevent soil splash",
+        "Step 4: Repeat spray every 7 days",
+        "Step 5: Ensure adequate potassium and calcium nutrition",
+        "Step 6: Stake plants for better air circulation"
+      ],
+      "yield_loss_pct": 35,
+      "economic_loss_per_acre_rs": 12000,
+      "marketplace": {
+        "recommended_products": ["Mancozeb 75 WP", "Chlorothalonil 75 WP", "Azoxystrobin 23 SC"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Tomato___Late_blight": {
+      "display_name": "Tomato Late Blight (Phytophthora infestans) — EMERGENCY",
+      "crop": "Tomato",
+      "first_aid": "EMERGENCY: Can destroy field in 3 days. Apply Metalaxyl + Mancozeb IMMEDIATELY. Stop all irrigation.",
+      "action_plan": [
+        "Step 1: STOP ALL IRRIGATION",
+        "Step 2: Apply Metalaxyl + Mancozeb (Ridomil Gold) 2.5g/L IMMEDIATELY",
+        "Step 3: Spray entire field — all plants, not just infected ones",
+        "Step 4: Remove and burn infected tissue",
+        "Step 5: Repeat every 5 days in wet conditions",
+        "Step 6: Contact KVK or agricultural extension officer immediately"
+      ],
+      "yield_loss_pct": 80,
+      "economic_loss_per_acre_rs": 28000,
+      "marketplace": {
+        "recommended_products": ["Metalaxyl + Mancozeb (Ridomil Gold)", "Cymoxanil 8% + Mancozeb 64%", "Propamocarb HCl"],
+        "product_type": "Systemic Fungicide — EMERGENCY"
+      }
+    },
+    "Tomato___Leaf_Mold": {
+      "display_name": "Tomato Leaf Mold (Passalora fulva)",
+      "crop": "Tomato",
+      "first_aid": "Apply chlorothalonil or mancozeb. Reduce greenhouse humidity by improving ventilation.",
+      "action_plan": [
+        "Step 1: Improve ventilation in greenhouse or polytunnel",
+        "Step 2: Reduce humidity below 85% — key control measure",
+        "Step 3: Apply Chlorothalonil 75 WP (2g/L) spray",
+        "Step 4: Avoid leaf wetness overnight",
+        "Step 5: Use resistant varieties with Cf gene"
+      ],
+      "yield_loss_pct": 20,
+      "economic_loss_per_acre_rs": 8000,
+      "marketplace": {
+        "recommended_products": ["Chlorothalonil 75 WP", "Mancozeb 75 WP", "Copper Oxychloride"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Tomato___Septoria_leaf_spot": {
+      "display_name": "Tomato Septoria Leaf Spot (Septoria lycopersici)",
+      "crop": "Tomato",
+      "first_aid": "Remove infected lower leaves. Apply mancozeb or copper fungicide spray immediately.",
+      "action_plan": [
+        "Step 1: Remove all leaves with tiny white spots with dark borders",
+        "Step 2: Apply Mancozeb 75 WP (2.5g/L) spray",
+        "Step 3: Mulch around base to prevent soil splash",
+        "Step 4: Stake plants to improve air circulation",
+        "Step 5: Spray every 7–10 days, especially after rain"
+      ],
+      "yield_loss_pct": 30,
+      "economic_loss_per_acre_rs": 10000,
+      "marketplace": {
+        "recommended_products": ["Mancozeb 75 WP", "Copper Oxychloride 50 WP", "Chlorothalonil 75 WP"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Tomato___Spider_mites Two-spotted_spider_mite": {
+      "display_name": "Tomato Spider Mites (Tetranychus urticae)",
+      "crop": "Tomato",
+      "first_aid": "Spider mites are NOT fungal — use miticide or neem oil. Do NOT use regular fungicide.",
+      "action_plan": [
+        "Step 1: Spray underside of leaves with water to dislodge mites",
+        "Step 2: Apply Abamectin 1.8 EC (0.5ml/L) miticide spray",
+        "Step 3: Rotate to Spiromesifen or Hexythiazox to prevent resistance",
+        "Step 4: Apply Neem Oil 1500 PPM as organic alternative",
+        "Step 5: Release predatory mite (Phytoseiulus persimilis) for biocontrol",
+        "Step 6: Increase irrigation frequency — mites prefer dry conditions"
+      ],
+      "yield_loss_pct": 25,
+      "economic_loss_per_acre_rs": 9000,
+      "marketplace": {
+        "recommended_products": ["Abamectin 1.8 EC", "Spiromesifen 22.9 SC", "Neem Oil 1500 PPM"],
+        "product_type": "Miticide / Biopesticide"
+      }
+    },
+    "Tomato___Target_Spot": {
+      "display_name": "Tomato Target Spot (Corynespora cassiicola)",
+      "crop": "Tomato",
+      "first_aid": "Apply azoxystrobin or tebuconazole fungicide. Remove infected leaves.",
+      "action_plan": [
+        "Step 1: Remove leaves with concentric ring lesions",
+        "Step 2: Apply Azoxystrobin 23 SC (1ml/L) spray",
+        "Step 3: Repeat every 7 days during tropical/humid conditions",
+        "Step 4: Alternate with Tebuconazole to prevent resistance",
+        "Step 5: Avoid dense planting — give 60cm plant spacing"
+      ],
+      "yield_loss_pct": 30,
+      "economic_loss_per_acre_rs": 11000,
+      "marketplace": {
+        "recommended_products": ["Azoxystrobin 23 SC", "Tebuconazole 250 EC", "Mancozeb 75 WP"],
+        "product_type": "Fungicide"
+      }
+    },
+    "Tomato___Tomato_Yellow_Leaf_Curl_Virus": {
+      "display_name": "Tomato Yellow Leaf Curl Virus (TYLCV) — Viral Disease",
+      "crop": "Tomato",
+      "first_aid": "NO CURE. Remove infected plants. Control whitefly vector with imidacloprid. Yellow sticky traps are essential.",
+      "action_plan": [
+        "Step 1: Remove and burn all infected plants immediately",
+        "Step 2: Apply Imidacloprid 17.8 SL (0.5ml/L) to control whitefly vector",
+        "Step 3: Install yellow sticky traps (40/acre) for whitefly monitoring",
+        "Step 4: Apply reflective silver mulch to repel whiteflies",
+        "Step 5: Use virus-resistant tomato varieties (check with seed supplier)",
+        "Step 6: Do NOT replant tomato in same field for 2 seasons"
+      ],
+      "yield_loss_pct": 85,
+      "economic_loss_per_acre_rs": 32000,
+      "marketplace": {
+        "recommended_products": ["Imidacloprid 17.8 SL", "Thiamethoxam 25 WG", "Yellow Sticky Traps", "Silver Reflective Mulch"],
+        "product_type": "Insecticide (vector control)"
+      }
+    },
+    "Tomato___Tomato_mosaic_virus": {
+      "display_name": "Tomato Mosaic Virus (ToMV) — Viral Disease",
+      "crop": "Tomato",
+      "first_aid": "No cure. Remove infected plants. Wash hands with soap before handling plants. Control aphid vectors.",
+      "action_plan": [
+        "Step 1: Remove infected plants showing mosaic mottling pattern",
+        "Step 2: Wash all handling tools with 10% bleach solution",
+        "Step 3: Control aphid vectors with Dimethoate 30 EC (1ml/L)",
+        "Step 4: Use resistant varieties — many modern hybrids have Tm gene",
+        "Step 5: Do not smoke near plants — Tobacco Mosaic Virus can transfer"
+      ],
+      "yield_loss_pct": 50,
+      "economic_loss_per_acre_rs": 18000,
+      "marketplace": {
+        "recommended_products": ["Dimethoate 30 EC (aphid control)", "Imidacloprid 17.8 SL", "Virus-resistant Tomato Seeds"],
+        "product_type": "Insecticide (vector control)"
+      }
+    },
+    "Tomato___healthy": {
+      "display_name": "Healthy Tomato",
+      "crop": "Tomato",
+      "first_aid": "No treatment needed. Plant is healthy!",
+      "action_plan": [
+        "Continue monitoring every 3–4 days",
+        "Apply preventive Mancozeb spray before monsoon",
+        "Maintain proper calcium-boron nutrition to prevent BER",
+        "Install traps for early pest detection"
+      ],
+      "yield_loss_pct": 0,
+      "economic_loss_per_acre_rs": 0,
+      "marketplace": {
+        "recommended_products": ["NPK 12-32-16", "Calcium Nitrate", "Mancozeb (preventive)"],
+        "product_type": "Preventive"
+      }
+    }
+  }
+}
