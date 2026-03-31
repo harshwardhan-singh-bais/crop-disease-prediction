@@ -12,8 +12,9 @@ Endpoints:
 
 import os
 import logging
+import base64
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Any
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +29,7 @@ load_dotenv()
 from model_loader import get_model, CLASS_NAMES, PlantDiseaseModel
 from intelligence_engine import IntelligenceEngine
 from db_client import get_db
+from sarvam_client import SarvamClient, SarvamClientError
 
 # ── Logging ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -43,11 +45,12 @@ logger = logging.getLogger(__name__)
 
 _model: Optional[PlantDiseaseModel] = None
 _engine: Optional[IntelligenceEngine] = None
+_sarvam: Optional[SarvamClient] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _model, _engine
+    global _model, _engine, _sarvam
     logger.info("🚀 Starting Crop Disease Intelligence Pipeline...")
 
     model_path     = os.getenv("MODEL_PATH", "mobilenetv2_plant.pth")
@@ -60,6 +63,9 @@ async def lifespan(app: FastAPI):
             protocols_path=protocols_path,
             weather_api_key=weather_key,
         )
+        _sarvam = SarvamClient.from_env()
+        if _sarvam is None:
+            logger.warning("SARVAM key not configured. Voice endpoints will return 503.")
         logger.info("✅ Pipeline ready.")
     except Exception as e:
         logger.error(f"❌ Startup failed: {e}")
@@ -144,6 +150,34 @@ class PredictionResponse(BaseModel):
     db_insert_id:   Optional[str] = None
 
 
+class SpeechToTextResponse(BaseModel):
+    transcript: str
+    language_code: str
+    model: str
+    raw: Optional[dict[str, Any]] = None
+
+
+class TextToSpeechResponse(BaseModel):
+    text: str
+    language_code: str
+    speaker: str
+    model: str
+    audio_mime_type: str
+    audio_base64: str
+
+
+class VoicePipelineResponse(BaseModel):
+    transcript: str
+    final_text: str
+    stt_language_code: str
+    tts_language_code: str
+    stt_model: str
+    tts_model: str
+    speaker: str
+    audio_mime_type: str
+    audio_base64: str
+
+
 # ══════════════════════════════════════════════════════════════════
 # ROUTES
 # ══════════════════════════════════════════════════════════════════
@@ -166,6 +200,15 @@ async def list_classes():
         "total": len(CLASS_NAMES),
         "classes": CLASS_NAMES,
     }
+
+
+def _get_sarvam_client() -> SarvamClient:
+    if _sarvam is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Sarvam voice service is not configured. Add SARVAM in .env and restart server.",
+        )
+    return _sarvam
 
 
 @app.post(
@@ -250,6 +293,146 @@ async def predict(
     result["db_insert_id"] = db_id
 
     return JSONResponse(content=result)
+
+
+@app.post(
+    "/voice/stt",
+    response_model=SpeechToTextResponse,
+    tags=["Voice"],
+    summary="Speech to text using Sarvam API",
+)
+async def speech_to_text(
+    file: UploadFile = File(..., description="Audio input file for transcription"),
+    language_code: str = Form("en-IN", description="Input language code"),
+    model: str = Form("saarika:v2", description="Sarvam STT model"),
+):
+    client = _get_sarvam_client()
+
+    try:
+        audio_bytes = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read audio file: {e}")
+
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded audio is empty")
+
+    try:
+        stt_result = client.transcribe(
+            audio_bytes=audio_bytes,
+            filename=file.filename or "audio.wav",
+            content_type=file.content_type or "audio/wav",
+            language_code=language_code,
+            model=model,
+        )
+    except SarvamClientError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return {
+        "transcript": stt_result["text"],
+        "language_code": language_code,
+        "model": model,
+        "raw": stt_result.get("raw"),
+    }
+
+
+@app.post(
+    "/voice/tts",
+    response_model=TextToSpeechResponse,
+    tags=["Voice"],
+    summary="Text to speech using Sarvam API",
+)
+async def text_to_speech(
+    text: str = Form(..., description="Text that should be spoken"),
+    language_code: str = Form("en-IN", description="Target language code"),
+    speaker: str = Form("anushka", description="Voice speaker"),
+    model: str = Form("bulbul:v2", description="Sarvam TTS model"),
+):
+    client = _get_sarvam_client()
+
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
+
+    try:
+        tts_result = client.synthesize(
+            text=text,
+            language_code=language_code,
+            speaker=speaker,
+            model=model,
+        )
+    except SarvamClientError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return {
+        "text": text,
+        "language_code": language_code,
+        "speaker": speaker,
+        "model": model,
+        "audio_mime_type": tts_result["mime_type"],
+        "audio_base64": base64.b64encode(tts_result["audio_bytes"]).decode("utf-8"),
+    }
+
+
+@app.post(
+    "/voice/pipeline",
+    response_model=VoicePipelineResponse,
+    tags=["Voice"],
+    summary="Speech in, text out, then speech out (STT then TTS)",
+)
+async def voice_pipeline(
+    file: UploadFile = File(..., description="Audio input file"),
+    stt_language_code: str = Form("en-IN", description="Speech input language"),
+    tts_language_code: Optional[str] = Form(None, description="Speech output language"),
+    final_text: Optional[str] = Form(None, description="Optional final response text for TTS"),
+    stt_model: str = Form("saarika:v2", description="Sarvam STT model"),
+    tts_model: str = Form("bulbul:v2", description="Sarvam TTS model"),
+    speaker: str = Form("anushka", description="Voice speaker"),
+):
+    client = _get_sarvam_client()
+
+    try:
+        audio_bytes = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read audio file: {e}")
+
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded audio is empty")
+
+    try:
+        stt_result = client.transcribe(
+            audio_bytes=audio_bytes,
+            filename=file.filename or "audio.wav",
+            content_type=file.content_type or "audio/wav",
+            language_code=stt_language_code,
+            model=stt_model,
+        )
+    except SarvamClientError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    transcript = stt_result["text"]
+    resolved_text = final_text.strip() if final_text and final_text.strip() else transcript
+    resolved_tts_language = tts_language_code or stt_language_code
+
+    try:
+        tts_result = client.synthesize(
+            text=resolved_text,
+            language_code=resolved_tts_language,
+            speaker=speaker,
+            model=tts_model,
+        )
+    except SarvamClientError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return {
+        "transcript": transcript,
+        "final_text": resolved_text,
+        "stt_language_code": stt_language_code,
+        "tts_language_code": resolved_tts_language,
+        "stt_model": stt_model,
+        "tts_model": tts_model,
+        "speaker": speaker,
+        "audio_mime_type": tts_result["mime_type"],
+        "audio_base64": base64.b64encode(tts_result["audio_bytes"]).decode("utf-8"),
+    }
 
 
 # ══════════════════════════════════════════════════════════════════

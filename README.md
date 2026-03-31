@@ -24,6 +24,45 @@ crop disease/
 
 ---
 
+## 🎙️ FastAPI Voice Pipeline (Sarvam STT + TTS)
+
+If you are running the backend (`main.py`), voice APIs are now available.
+
+### Required `.env`
+
+```env
+SARVAM=your-sarvam-api-key
+SARVAM_BASE_URL=https://api.sarvam.ai
+SARVAM_STT_PATH=/speech-to-text
+SARVAM_TTS_PATH=/text-to-speech
+```
+
+### Endpoints
+
+- `POST /voice/stt`:
+Speech input file → text transcript.
+
+- `POST /voice/tts`:
+Text input → speech output (`audio_base64` + MIME type).
+
+- `POST /voice/pipeline`:
+Speech input → STT transcript → final text → TTS audio.
+If `final_text` is not passed, transcript is spoken directly.
+
+### Example (combined pipeline)
+
+```bash
+curl -X POST "http://127.0.0.1:8000/voice/pipeline" \
+  -F "file=@sample.wav" \
+  -F "stt_language_code=hi-IN" \
+  -F "tts_language_code=hi-IN" \
+  -F "stt_model=saarika:v2" \
+  -F "tts_model=bulbul:v2" \
+  -F "speaker=anushka"
+```
+
+---
+
 ## 🏗️ Architecture Overview
 
 ```
