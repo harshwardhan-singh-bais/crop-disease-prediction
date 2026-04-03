@@ -61,6 +61,80 @@ curl -X POST "http://127.0.0.1:8000/voice/pipeline" \
   -F "speaker=anushka"
 ```
 
+### Console Pipeline Testing (Online + Offline)
+
+Use the CLI pipeline in `main.py` for full stage-wise logs.
+
+1. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Add Sarvam keys in `.env` for online testing:
+
+```env
+SARVAM=your-sarvam-api-key
+# or
+SARVAM_API_KEY=your-sarvam-api-key
+```
+
+3. Test online Sarvam STT + TTS:
+
+```bash
+python main.py --audio input.wav --mode online --stt-lang hi-IN --tts-lang hi-IN --speaker anushka --log-level DEBUG
+```
+
+4. Test offline Whisper STT only (no network/Sarvam required):
+
+```bash
+python main.py --audio input.wav --mode offline --whisper-model base --whisper-language hi --log-level DEBUG
+```
+
+5. Test fallback mode (Sarvam first, Whisper fallback):
+
+```bash
+python main.py --audio input.wav --mode auto --log-level DEBUG
+```
+
+6. Save full console logs to file:
+
+```bash
+python main.py --audio input.wav --mode auto --log-level DEBUG > pipeline.log 2>&1
+```
+
+### Speech Input Flow
+
+You can now speak directly into your microphone and let the pipeline record the audio first.
+
+Interactive mode:
+
+```bash
+python main.py
+```
+
+You will be asked to choose:
+- input source: `mic` or `file`
+- mode: `online`, `offline`, or `auto`
+- recording duration if `mic` is selected
+
+Direct microphone test file:
+
+```bash
+python voice_input_test.py --mode online --seconds 5 --audio input.wav
+python voice_input_test.py --mode offline --seconds 5 --audio input.wav
+```
+
+Flow behavior:
+- Online: microphone speech -> Sarvam STT -> transcript -> Sarvam TTS replay
+- Offline: microphone speech -> Whisper STT -> transcript only
+- Auto: Sarvam STT first, then Whisper fallback if Sarvam fails
+
+Notes:
+- Offline STT uses OpenAI Whisper. Ensure ffmpeg is installed in system PATH.
+- Online mode requires valid Sarvam credentials and internet.
+- In offline mode, TTS is skipped by design and reported in final JSON.
+
 ---
 
 ## 🏗️ Architecture Overview

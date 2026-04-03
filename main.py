@@ -1,450 +1,320 @@
-"""
-main.py
-=======
-FastAPI server — Full Crop Disease Intelligence Pipeline
 
-Endpoints:
-  POST /predict          — accepts leaf image, returns full intelligence report + stores to DB
-  GET  /health           — health check
-  GET  /classes          — list all 38 supported disease classes
-  GET  /docs             — auto-generated Swagger UI (FastAPI built-in)
-"""
-
-import os
+import argparse
+import json
 import logging
-import base64
-from contextlib import asynccontextmanager
-from typing import Optional, Any
+import os
+import tempfile
+import sys
+from datetime import datetime
+from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 
-# ── Load .env before anything else ────────────────────────────────
-load_dotenv()
+from speech_router import speech_pipeline
+from voice_input import record_microphone_to_wav
 
-# ── Internal modules ───────────────────────────────────────────────
-from model_loader import get_model, CLASS_NAMES, PlantDiseaseModel
-from intelligence_engine import IntelligenceEngine
-from db_client import get_db
-from sarvam_client import SarvamClient, SarvamClientError
+LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+logger = logging.getLogger("Main")
 
-# ── Logging ───────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
-)
-logger = logging.getLogger(__name__)
+app = FastAPI(title="Crop Disease Voice API", version="1.0.0")
 
 
-# ══════════════════════════════════════════════════════════════════
-# STARTUP / SHUTDOWN  (load model once at boot)
-# ══════════════════════════════════════════════════════════════════
-
-_model: Optional[PlantDiseaseModel] = None
-_engine: Optional[IntelligenceEngine] = None
-_sarvam: Optional[SarvamClient] = None
+def configure_logging(log_level: str) -> None:
+    level = getattr(logging, log_level.upper(), logging.INFO)
+    logging.basicConfig(level=level, format=LOG_FORMAT)
+    logger.info("[BOOT] Logging initialized at level=%s", logging.getLevelName(level))
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global _model, _engine, _sarvam
-    logger.info("🚀 Starting Crop Disease Intelligence Pipeline...")
+def _ensure_env_loaded() -> None:
+    if not os.getenv("SARVAM") and not os.getenv("SARVAM_API_KEY"):
+        load_dotenv()
 
-    model_path     = os.getenv("MODEL_PATH", "mobilenetv2_plant.pth")
-    protocols_path = os.getenv("PROTOCOLS_PATH", "disease_protocols.json")
-    weather_key    = os.getenv("OPENWEATHER_API_KEY", "")
 
-    try:
-        _model  = get_model(model_path)
-        _engine = IntelligenceEngine(
-            protocols_path=protocols_path,
-            weather_api_key=weather_key,
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Speech input pipeline for Sarvam STT/TTS (online) and Whisper STT (offline)."
+    )
+    parser.add_argument("--audio", default=None, help="Input audio file path")
+    parser.add_argument(
+        "--input-source",
+        default="prompt",
+        choices=["prompt", "file", "mic"],
+        help="Where speech input comes from: prompt asks interactively, file uses a wav file, mic records from microphone",
+    )
+    parser.add_argument("--record-seconds", type=int, default=5, help="Mic recording length in seconds")
+    parser.add_argument("--sample-rate", type=int, default=16000, help="Mic recording sample rate")
+    parser.add_argument(
+        "--stt-only",
+        action="store_true",
+        help="Stop after speech-to-text and do not generate speech output",
+    )
+    parser.add_argument(
+        "--mode",
+        default="prompt",
+        choices=["prompt", "auto", "online", "offline"],
+        help="Pipeline mode: prompt asks interactively, online uses Sarvam only, offline uses Whisper only, auto tries Sarvam then Whisper",
+    )
+    parser.add_argument("--stt-lang", default="en-IN", help="STT language code")
+    parser.add_argument("--stt-model", default="saarika:v2", help="Sarvam STT model")
+    parser.add_argument("--tts-lang", default="en-IN", help="TTS language code")
+    parser.add_argument("--tts-model", default="bulbul:v2", help="Sarvam TTS model")
+    parser.add_argument("--speaker", default="anushka", help="Sarvam TTS speaker")
+    parser.add_argument("--whisper-model", default="base", help="Whisper model size")
+    parser.add_argument(
+        "--whisper-language",
+        default=None,
+        help="Optional Whisper language hint like en/hi/mr",
+    )
+    parser.add_argument(
+        "--response-text",
+        default=None,
+        help="Optional response text to send to TTS; default uses transcript-based template",
+    )
+    parser.add_argument("--output-audio", default="response_output.wav", help="Output TTS audio path")
+    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    return parser.parse_args(argv)
+
+
+def _prompt_with_default(message: str, default: str) -> str:
+    value = input(f"{message} [{default}]: ").strip()
+    return value or default
+
+
+def prompt_for_interactive_config(args: argparse.Namespace) -> argparse.Namespace:
+    logger.info("[INPUT] Interactive mode enabled")
+
+    if args.mode == "prompt":
+        args.mode = _prompt_with_default("Choose STT mode (online/offline/auto)", "auto")
+
+    if args.input_source == "prompt":
+        args.input_source = _prompt_with_default("Choose input source (mic/file)", "mic")
+
+    if args.input_source == "file":
+        args.audio = _prompt_with_default("Enter input WAV file path", args.audio or "input.wav")
+    elif args.input_source == "mic":
+        args.record_seconds = int(_prompt_with_default("Record duration in seconds", str(args.record_seconds)))
+        args.sample_rate = int(_prompt_with_default("Sample rate", str(args.sample_rate)))
+
+    stt_only_answer = _prompt_with_default("Stop after STT and print transcript only? (y/n)", "y")
+    args.stt_only = stt_only_answer.lower().startswith("y")
+
+    return args
+
+
+def run_pipeline(args: argparse.Namespace) -> dict:
+    logger.info("[BOOT] Loading environment variables from .env")
+    _ensure_env_loaded()
+
+    if args.mode == "prompt" or args.input_source == "prompt":
+        args = prompt_for_interactive_config(args)
+
+    if args.input_source == "mic":
+        logger.info("[INPUT] Recording speech from microphone")
+        args.audio = record_microphone_to_wav(
+            output_path=args.audio or "input.wav",
+            duration_seconds=args.record_seconds,
+            sample_rate=args.sample_rate,
         )
-        _sarvam = SarvamClient.from_env()
-        if _sarvam is None:
-            logger.warning("SARVAM key not configured. Voice endpoints will return 503.")
-        logger.info("✅ Pipeline ready.")
-    except Exception as e:
-        logger.error(f"❌ Startup failed: {e}")
-        raise
 
-    yield  # ← server runs here
+    if not args.audio:
+        raise ValueError("No audio input provided. Use --audio, --input-source file, or --input-source mic.")
 
-    logger.info("🛑 Shutting down...")
+    logger.info("[CHECK] Input audio path=%s", args.audio)
+    if not os.path.exists(args.audio):
+        raise FileNotFoundError(f"Input audio file not found: {args.audio}")
 
+    logger.info("[CHECK] Requested mode=%s", args.mode)
+    logger.info("[CHECK] Sarvam key present=%s", bool(os.getenv("SARVAM") or os.getenv("SARVAM_API_KEY")))
 
-# ══════════════════════════════════════════════════════════════════
-# APP
-# ══════════════════════════════════════════════════════════════════
-
-app = FastAPI(
-    title="🌿 Crop Disease Intelligence API",
-    description=(
-        "Multi-layer AI pipeline for crop disease detection.\n\n"
-        "**Layer 1** — MobileNetV2 DL model (38 disease classes)\n"
-        "**Layer 2** — Intelligence Engine (severity, remedy, weather, economics)\n"
-        "**DB**      — Supabase `disease_scans` table\n\n"
-        "Upload a leaf image and get a full agronomic intelligence report."
-    ),
-    version="2.0.0",
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    result = speech_pipeline(
+        audio_input_path=args.audio,
+        mode=args.mode,
+        output_audio_path=args.output_audio,
+        custom_response_text="" if args.stt_only else args.response_text,
+        stt_language_code=args.stt_lang,
+        stt_model=args.stt_model,
+        tts_language_code=args.tts_lang,
+        tts_model=args.tts_model,
+        tts_speaker=args.speaker,
+        whisper_model_size=args.whisper_model,
+        whisper_language_hint=args.whisper_language,
+    )
+    return result
 
 
-# ══════════════════════════════════════════════════════════════════
-# RESPONSE MODELS
-# ══════════════════════════════════════════════════════════════════
-
-class LocationModel(BaseModel):
-    lat: Optional[float] = None
-    lon: Optional[float] = None
-
-class MarketplaceModel(BaseModel):
-    recommended_products: list[str]
-    product_type: str
-    note: str
-
-class PredictionResponse(BaseModel):
-    # Layer 1
-    disease:        str
-    disease_key:    str
-    crop:           str
-    confidence:     float = Field(description="Confidence in %")
-    confidence_raw: float = Field(description="Raw softmax probability (0–1)")
-
-    # Validation engine outputs
-    severity:       str
-    severity_level: str
-    is_positive:    bool = Field(description="True = diseased, False = healthy")
-    disease_type:   str  = Field(description="fungal | bacterial | viral | pest | healthy | unknown")
-
-    # Layer 2 intelligence
-    first_aid:      str
-    action_plan:    list[str]
-    weather_advice: str
-
-    # Economic
-    yield_loss_pct:         Optional[float]
-    economic_loss_rs:       Optional[float]
-    economic_loss_per_acre: Optional[float]
-
-    # Routing
-    marketplace:    MarketplaceModel
-
-    # Meta
-    location:             LocationModel
-    timestamp:            str
-    top_k_predictions:    list[dict]
-
-    # DB result
-    db_insert_id:   Optional[str] = None
+def _save_upload_to_temp(upload: UploadFile) -> str:
+    suffix = Path(upload.filename or "audio.wav").suffix or ".wav"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(upload.file.read())
+        return temp_file.name
 
 
-class SpeechToTextResponse(BaseModel):
-    transcript: str
-    language_code: str
-    model: str
-    raw: Optional[dict[str, Any]] = None
+@app.on_event("startup")
+def startup_event() -> None:
+    configure_logging(os.getenv("LOG_LEVEL", "INFO"))
+    _ensure_env_loaded()
+    logger.info("[APP] FastAPI app started")
 
 
-class TextToSpeechResponse(BaseModel):
-    text: str
-    language_code: str
-    speaker: str
-    model: str
-    audio_mime_type: str
-    audio_base64: str
-
-
-class VoicePipelineResponse(BaseModel):
-    transcript: str
-    final_text: str
-    stt_language_code: str
-    tts_language_code: str
-    stt_model: str
-    tts_model: str
-    speaker: str
-    audio_mime_type: str
-    audio_base64: str
-
-
-# ══════════════════════════════════════════════════════════════════
-# ROUTES
-# ══════════════════════════════════════════════════════════════════
-
-@app.get("/health", tags=["System"])
-async def health_check():
-    """Server and model health check."""
+@app.get("/health")
+def health() -> dict:
     return {
         "status": "ok",
-        "model_loaded":  _model is not None,
-        "engine_loaded": _engine is not None,
-        "db_connected":  get_db().is_connected,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "sarvam_configured": bool(os.getenv("SARVAM") or os.getenv("SARVAM_API_KEY")),
     }
 
 
-@app.get("/classes", tags=["Model Info"])
-async def list_classes():
-    """Returns all 38 supported disease/healthy class names."""
-    return {
-        "total": len(CLASS_NAMES),
-        "classes": CLASS_NAMES,
-    }
-
-
-def _get_sarvam_client() -> SarvamClient:
-    if _sarvam is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Sarvam voice service is not configured. Add SARVAM in .env and restart server.",
-        )
-    return _sarvam
-
-
-@app.post(
-    "/predict",
-    response_model=PredictionResponse,
-    tags=["Prediction"],
-    summary="Upload a leaf image and get the full intelligence report",
-)
-async def predict(
-    file:            UploadFile = File(..., description="Leaf image (JPG/PNG)"),
-    latitude:        Optional[float] = Form(None, description="GPS latitude"),
-    longitude:       Optional[float] = Form(None, description="GPS longitude"),
-    crop_area_acres: float           = Form(1.0,  description="Farm area in acres"),
-    market_price:    float           = Form(1500.0, description="Current mandi price ₹/quintal"),
-    top_k:           int             = Form(3,    description="Number of top predictions"),
-):
-    """
-    ## Full Pipeline
-    1. Upload leaf image
-    2. MobileNetV2 runs inference → disease class + confidence
-    3. IntelligenceEngine enriches result → severity, remedy, weather, economics
-    4. ValidationEngine ensures all fields are consistent
-    5. Result stored in Supabase `disease_scans` table
-    6. Full JSON response returned
-
-    ### Form Fields
-    - **file**: Leaf image file (JPEG or PNG)
-    - **latitude / longitude**: GPS coordinates (optional, for weather advice)
-    - **crop_area_acres**: Size of farm plot (default: 1.0)
-    - **market_price**: Current mandi price in ₹/quintal (default: 1500)
-    - **top_k**: Number of top disease predictions (default: 3)
-    """
-    if _model is None or _engine is None:
-        raise HTTPException(status_code=503, detail="Model not loaded. Server is still starting up.")
-
-    # ── Validate file type ─────────────────────────────────────────
-    if file.content_type not in ("image/jpeg", "image/jpg", "image/png", "image/webp"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type: {file.content_type}. Only JPEG/PNG/WebP accepted.",
-        )
-
-    # ── Read image ────────────────────────────────────────────────
-    try:
-        image_bytes = await file.read()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not read image: {e}")
-
-    # ── Layer 1: Model inference ──────────────────────────────────
-    try:
-        disease_key, confidence, top_k_results = _model.predict(image_bytes, top_k=top_k)
-        logger.info(f"🔍 Prediction: {disease_key} ({confidence*100:.1f}%)")
-    except Exception as e:
-        logger.error(f"Model inference failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Model inference failed: {e}")
-
-    # ── Layer 2: Intelligence Engine + Validation ─────────────────
-    location = (latitude, longitude) if latitude is not None and longitude is not None else None
-    try:
-        result = _engine.analyze(
-            disease_key=disease_key,
-            confidence=confidence,
-            location=location,
-            crop_area_acres=crop_area_acres,
-            market_price_rs_per_quintal=market_price,
-            top_k_predictions=top_k_results,
-        )
-    except Exception as e:
-        logger.error(f"Intelligence engine failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Intelligence processing failed: {e}")
-
-    # ── DB Insert ─────────────────────────────────────────────────
-    db_id = None
-    try:
-        db = get_db()
-        db_record = db.insert_scan(result)
-        if db_record and not db_record.get("dry_run"):
-            db_id = db_record.get("id")
-    except Exception as e:
-        logger.warning(f"DB insert failed (non-fatal): {e}")
-
-    result["db_insert_id"] = db_id
-
-    return JSONResponse(content=result)
-
-
-@app.post(
-    "/voice/stt",
-    response_model=SpeechToTextResponse,
-    tags=["Voice"],
-    summary="Speech to text using Sarvam API",
-)
-async def speech_to_text(
-    file: UploadFile = File(..., description="Audio input file for transcription"),
-    language_code: str = Form("en-IN", description="Input language code"),
-    model: str = Form("saarika:v2", description="Sarvam STT model"),
-):
-    client = _get_sarvam_client()
-
-    try:
-        audio_bytes = await file.read()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not read audio file: {e}")
-
-    if not audio_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded audio is empty")
-
-    try:
-        stt_result = client.transcribe(
-            audio_bytes=audio_bytes,
-            filename=file.filename or "audio.wav",
-            content_type=file.content_type or "audio/wav",
-            language_code=language_code,
-            model=model,
-        )
-    except SarvamClientError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-    return {
-        "transcript": stt_result["text"],
-        "language_code": language_code,
-        "model": model,
-        "raw": stt_result.get("raw"),
-    }
-
-
-@app.post(
-    "/voice/tts",
-    response_model=TextToSpeechResponse,
-    tags=["Voice"],
-    summary="Text to speech using Sarvam API",
-)
-async def text_to_speech(
-    text: str = Form(..., description="Text that should be spoken"),
-    language_code: str = Form("en-IN", description="Target language code"),
-    speaker: str = Form("anushka", description="Voice speaker"),
-    model: str = Form("bulbul:v2", description="Sarvam TTS model"),
-):
-    client = _get_sarvam_client()
-
-    if not text.strip():
-        raise HTTPException(status_code=400, detail="Text cannot be empty")
-
-    try:
-        tts_result = client.synthesize(
-            text=text,
-            language_code=language_code,
-            speaker=speaker,
-            model=model,
-        )
-    except SarvamClientError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-    return {
-        "text": text,
-        "language_code": language_code,
-        "speaker": speaker,
-        "model": model,
-        "audio_mime_type": tts_result["mime_type"],
-        "audio_base64": base64.b64encode(tts_result["audio_bytes"]).decode("utf-8"),
-    }
-
-
-@app.post(
-    "/voice/pipeline",
-    response_model=VoicePipelineResponse,
-    tags=["Voice"],
-    summary="Speech in, text out, then speech out (STT then TTS)",
-)
+@app.post("/voice/pipeline")
 async def voice_pipeline(
-    file: UploadFile = File(..., description="Audio input file"),
-    stt_language_code: str = Form("en-IN", description="Speech input language"),
-    tts_language_code: Optional[str] = Form(None, description="Speech output language"),
-    final_text: Optional[str] = Form(None, description="Optional final response text for TTS"),
-    stt_model: str = Form("saarika:v2", description="Sarvam STT model"),
-    tts_model: str = Form("bulbul:v2", description="Sarvam TTS model"),
-    speaker: str = Form("anushka", description="Voice speaker"),
+    file: UploadFile = File(...),
+    mode: str = Form(default="auto"),
+    stt_language_code: str = Form(default="en-IN"),
+    stt_model: str = Form(default="saarika:v2"),
+    tts_language_code: str = Form(default="en-IN"),
+    tts_model: str = Form(default="bulbul:v2"),
+    speaker: str = Form(default="anushka"),
+    whisper_model: str = Form(default="base"),
+    whisper_language: str | None = Form(default=None),
 ):
-    client = _get_sarvam_client()
-
+    temp_path = _save_upload_to_temp(file)
     try:
-        audio_bytes = await file.read()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not read audio file: {e}")
-
-    if not audio_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded audio is empty")
-
-    try:
-        stt_result = client.transcribe(
-            audio_bytes=audio_bytes,
-            filename=file.filename or "audio.wav",
-            content_type=file.content_type or "audio/wav",
-            language_code=stt_language_code,
-            model=stt_model,
+        result = speech_pipeline(
+            audio_input_path=temp_path,
+            mode=mode,
+            stt_language_code=stt_language_code,
+            stt_model=stt_model,
+            tts_language_code=tts_language_code,
+            tts_model=tts_model,
+            tts_speaker=speaker,
+            whisper_model_size=whisper_model,
+            whisper_language_hint=whisper_language,
         )
-    except SarvamClientError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        return JSONResponse(result)
+    finally:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
 
-    transcript = stt_result["text"]
-    resolved_text = final_text.strip() if final_text and final_text.strip() else transcript
-    resolved_tts_language = tts_language_code or stt_language_code
+
+@app.post("/voice/stt")
+async def voice_stt(
+    file: UploadFile = File(...),
+    mode: str = Form(default="auto"),
+    stt_language_code: str = Form(default="en-IN"),
+    stt_model: str = Form(default="saarika:v2"),
+    whisper_model: str = Form(default="base"),
+    whisper_language: str | None = Form(default=None),
+):
+    temp_path = _save_upload_to_temp(file)
+    try:
+        result = speech_pipeline(
+            audio_input_path=temp_path,
+            mode=mode,
+            custom_response_text="",
+            stt_language_code=stt_language_code,
+            stt_model=stt_model,
+            whisper_model_size=whisper_model,
+            whisper_language_hint=whisper_language,
+        )
+        stt_result = result.get("stt", {})
+        return JSONResponse(
+            {
+                "status": result.get("status"),
+                "mode": stt_result.get("mode"),
+                "provider": stt_result.get("provider"),
+                "transcript": result.get("transcript"),
+                "error": stt_result.get("error"),
+            }
+        )
+    finally:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+
+
+@app.post("/voice/tts")
+async def voice_tts(
+    text: str = Form(...),
+    tts_language_code: str = Form(default="en-IN"),
+    tts_model: str = Form(default="bulbul:v2"),
+    speaker: str = Form(default="anushka"),
+):
+    from sarvam_client import SarvamClient
+    from tts import generate_speech
+
+    _ensure_env_loaded()
+    client = SarvamClient.from_env()
+    if client is None:
+        raise HTTPException(status_code=400, detail="Sarvam client is not configured")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+        output_path = temp_file.name
 
     try:
-        tts_result = client.synthesize(
-            text=resolved_text,
-            language_code=resolved_tts_language,
-            speaker=speaker,
-            model=tts_model,
+        result = generate_speech(
+            text=text,
+            output_path=output_path,
+            sarvam_client=client,
+            tts_language_code=tts_language_code,
+            tts_model=tts_model,
+            tts_speaker=speaker,
         )
-    except SarvamClientError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        if result.get("error"):
+            raise HTTPException(status_code=500, detail=result.get("error"))
+        return JSONResponse(result)
+    finally:
+        try:
+            os.remove(output_path)
+        except OSError:
+            pass
 
-    return {
-        "transcript": transcript,
-        "final_text": resolved_text,
-        "stt_language_code": stt_language_code,
-        "tts_language_code": resolved_tts_language,
-        "stt_model": stt_model,
-        "tts_model": tts_model,
-        "speaker": speaker,
-        "audio_mime_type": tts_result["mime_type"],
-        "audio_base64": base64.b64encode(tts_result["audio_bytes"]).decode("utf-8"),
+
+def print_final_report(result: dict) -> None:
+    final_output = {
+        "status": result.get("status"),
+        "requested_mode": result.get("requested_mode"),
+        "stt_mode": result.get("stt", {}).get("mode"),
+        "stt_provider": result.get("stt", {}).get("provider"),
+        "tts_mode": result.get("tts", {}).get("mode"),
+        "tts_provider": result.get("tts", {}).get("provider"),
+        "transcript": result.get("transcript"),
+        "response_text": result.get("response_text"),
+        "audio_path": result.get("audio_path"),
+        "runtime_seconds": result.get("runtime_seconds"),
+        "errors": {
+            "stt_error": result.get("stt", {}).get("error"),
+            "tts_error": result.get("tts", {}).get("error"),
+        },
+        "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
+    print("\n" + "=" * 90)
+    print("FINAL PIPELINE REPORT")
+    print("=" * 90)
+    print(json.dumps(final_output, indent=2, ensure_ascii=False))
+    print("=" * 90 + "\n")
 
-# ══════════════════════════════════════════════════════════════════
-# ENTRY POINT
-# ══════════════════════════════════════════════════════════════════
 
-def main():
-    import uvicorn
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8000"))
-    uvicorn.run("main:app", host=host, port=port, reload=False)
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv or sys.argv[1:])
+    configure_logging(args.log_level)
+
+    logger.info("[START] Full voice pipeline execution started")
+    logger.info("[START] Args=%s", vars(args))
+
+    try:
+        result = run_pipeline(args)
+        print_final_report(result)
+        return 0 if result.get("status") == "success" else 1
+    except Exception:
+        logger.exception("[FATAL] Pipeline failed")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
