@@ -56,7 +56,7 @@ curl -X POST "http://127.0.0.1:8000/voice/pipeline" \
   -F "file=@sample.wav" \
   -F "stt_language_code=hi-IN" \
   -F "tts_language_code=hi-IN" \
-  -F "stt_model=saarika:v2" \
+  -F "stt_model=saarika:v2.5" \
   -F "tts_model=bulbul:v2" \
   -F "speaker=anushka"
 ```

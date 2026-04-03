@@ -22,8 +22,9 @@ def speech_pipeline(
     mode: str = "auto",
     output_audio_path: str = "response_output.wav",
     custom_response_text: str | None = None,
+    enable_tts: bool = True,
     stt_language_code: str = "en-IN",
-    stt_model: str = "saarika:v2",
+    stt_model: str = "saarika:v2.5",
     tts_language_code: str = "en-IN",
     tts_model: str = "bulbul:v2",
     tts_speaker: str = "anushka",
@@ -63,7 +64,7 @@ def speech_pipeline(
     response_text = _build_response_text(transcript, custom_response_text)
     logger.info("[PIPELINE] Response text generated (chars=%s)", len(response_text))
 
-    should_run_tts = requested_mode != "offline" and custom_response_text is not None
+    should_run_tts = requested_mode != "offline" and enable_tts
     if should_run_tts:
         tts_result = generate_speech(
             text=response_text,
@@ -74,14 +75,17 @@ def speech_pipeline(
             tts_speaker=tts_speaker,
         )
     else:
-        logger.info("[PIPELINE] Offline mode requested, skipping TTS stage")
-        if requested_mode != "offline":
+        if requested_mode == "offline":
+            logger.info("[PIPELINE] Offline mode requested, skipping TTS stage")
+            skip_reason = "TTS disabled in offline mode"
+        else:
             logger.info("[PIPELINE] TTS skipped because this flow is STT-only")
+            skip_reason = "TTS disabled by caller"
         tts_result = {
             "audio_path": None,
             "mode": "skipped",
             "provider": "none",
-            "error": "TTS disabled in offline mode",
+            "error": skip_reason,
             "mime_type": None,
         }
 

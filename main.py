@@ -5,7 +5,8 @@ import logging
 import os
 import tempfile
 import sys
-from datetime import datetime
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -18,8 +19,6 @@ from voice_input import record_microphone_to_wav
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 logger = logging.getLogger("Main")
 
-app = FastAPI(title="Crop Disease Voice API", version="1.0.0")
-
 
 def configure_logging(log_level: str) -> None:
     level = getattr(logging, log_level.upper(), logging.INFO)
@@ -30,6 +29,17 @@ def configure_logging(log_level: str) -> None:
 def _ensure_env_loaded() -> None:
     if not os.getenv("SARVAM") and not os.getenv("SARVAM_API_KEY"):
         load_dotenv()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    configure_logging(os.getenv("LOG_LEVEL", "INFO"))
+    _ensure_env_loaded()
+    logger.info("[APP] FastAPI app started")
+    yield
+
+
+app = FastAPI(title="Crop Disease Voice API", version="1.0.0", lifespan=lifespan)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -57,7 +67,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Pipeline mode: prompt asks interactively, online uses Sarvam only, offline uses Whisper only, auto tries Sarvam then Whisper",
     )
     parser.add_argument("--stt-lang", default="en-IN", help="STT language code")
-    parser.add_argument("--stt-model", default="saarika:v2", help="Sarvam STT model")
+    parser.add_argument("--stt-model", default="saarika:v2.5", help="Sarvam STT model")
     parser.add_argument("--tts-lang", default="en-IN", help="TTS language code")
     parser.add_argument("--tts-model", default="bulbul:v2", help="Sarvam TTS model")
     parser.add_argument("--speaker", default="anushka", help="Sarvam TTS speaker")
@@ -132,7 +142,8 @@ def run_pipeline(args: argparse.Namespace) -> dict:
         audio_input_path=args.audio,
         mode=args.mode,
         output_audio_path=args.output_audio,
-        custom_response_text="" if args.stt_only else args.response_text,
+        custom_response_text=args.response_text,
+        enable_tts=not args.stt_only,
         stt_language_code=args.stt_lang,
         stt_model=args.stt_model,
         tts_language_code=args.tts_lang,
@@ -151,18 +162,11 @@ def _save_upload_to_temp(upload: UploadFile) -> str:
         return temp_file.name
 
 
-@app.on_event("startup")
-def startup_event() -> None:
-    configure_logging(os.getenv("LOG_LEVEL", "INFO"))
-    _ensure_env_loaded()
-    logger.info("[APP] FastAPI app started")
-
-
 @app.get("/health")
 def health() -> dict:
     return {
         "status": "ok",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "sarvam_configured": bool(os.getenv("SARVAM") or os.getenv("SARVAM_API_KEY")),
     }
 
@@ -172,7 +176,7 @@ async def voice_pipeline(
     file: UploadFile = File(...),
     mode: str = Form(default="auto"),
     stt_language_code: str = Form(default="en-IN"),
-    stt_model: str = Form(default="saarika:v2"),
+    stt_model: str = Form(default="saarika:v2.5"),
     tts_language_code: str = Form(default="en-IN"),
     tts_model: str = Form(default="bulbul:v2"),
     speaker: str = Form(default="anushka"),
@@ -184,6 +188,7 @@ async def voice_pipeline(
         result = speech_pipeline(
             audio_input_path=temp_path,
             mode=mode,
+            enable_tts=True,
             stt_language_code=stt_language_code,
             stt_model=stt_model,
             tts_language_code=tts_language_code,
@@ -205,7 +210,7 @@ async def voice_stt(
     file: UploadFile = File(...),
     mode: str = Form(default="auto"),
     stt_language_code: str = Form(default="en-IN"),
-    stt_model: str = Form(default="saarika:v2"),
+    stt_model: str = Form(default="saarika:v2.5"),
     whisper_model: str = Form(default="base"),
     whisper_language: str | None = Form(default=None),
 ):
@@ -214,7 +219,7 @@ async def voice_stt(
         result = speech_pipeline(
             audio_input_path=temp_path,
             mode=mode,
-            custom_response_text="",
+            enable_tts=False,
             stt_language_code=stt_language_code,
             stt_model=stt_model,
             whisper_model_size=whisper_model,
@@ -290,7 +295,7 @@ def print_final_report(result: dict) -> None:
             "stt_error": result.get("stt", {}).get("error"),
             "tts_error": result.get("tts", {}).get("error"),
         },
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 
     print("\n" + "=" * 90)

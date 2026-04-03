@@ -91,7 +91,7 @@ def transcribe_audio(
     mode: str = "auto",
     sarvam_client: Optional[SarvamClient] = None,
     stt_language_code: str = "en-IN",
-    stt_model: str = "saarika:v2",
+    stt_model: str = "saarika:v2.5",
     whisper_model_size: str = "base",
     whisper_language_hint: Optional[str] = None,
 ) -> dict[str, Any]:

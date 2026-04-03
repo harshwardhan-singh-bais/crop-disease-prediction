@@ -56,7 +56,7 @@ class SarvamClient:
         filename: str,
         content_type: str,
         language_code: str = "en-IN",
-        model: str = "saarika:v2",
+        model: str = "saarika:v2.5",
     ) -> dict[str, Any]:
         files = {
             "file": (filename or "audio.wav", audio_bytes, content_type or "audio/wav"),
@@ -76,7 +76,8 @@ class SarvamClient:
             )
             response.raise_for_status()
         except requests.RequestException as exc:
-            raise SarvamClientError(f"Sarvam STT request failed: {exc}") from exc
+            detail = self._extract_error_detail(exc)
+            raise SarvamClientError(f"Sarvam STT request failed: {detail}") from exc
 
         payload = self._safe_json(response)
         text = self._extract_transcript(payload)
@@ -115,7 +116,8 @@ class SarvamClient:
             )
             response.raise_for_status()
         except requests.RequestException as exc:
-            raise SarvamClientError(f"Sarvam TTS request failed: {exc}") from exc
+            detail = self._extract_error_detail(exc)
+            raise SarvamClientError(f"Sarvam TTS request failed: {detail}") from exc
 
         content_type = response.headers.get("content-type", "audio/mpeg")
         if content_type.startswith("audio/"):
@@ -145,6 +147,19 @@ class SarvamClient:
             return response.json()
         except ValueError as exc:
             raise SarvamClientError("Sarvam response was not valid JSON") from exc
+
+    def _extract_error_detail(self, exc: requests.RequestException) -> str:
+        response = getattr(exc, "response", None)
+        if response is None:
+            return str(exc)
+
+        body_text = (response.text or "").strip()
+        if len(body_text) > 800:
+            body_text = body_text[:800] + "..."
+
+        if body_text:
+            return f"{response.status_code} {response.reason}. Response body: {body_text}"
+        return str(exc)
 
     def _extract_transcript(self, payload: dict[str, Any]) -> str:
         direct_keys = [

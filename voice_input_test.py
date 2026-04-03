@@ -18,7 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-rate", type=int, default=16000, help="Recording sample rate")
     parser.add_argument("--audio", default="input.wav", help="Output WAV file path")
     parser.add_argument("--stt-lang", default="en-IN")
-    parser.add_argument("--stt-model", default="saarika:v2")
+    parser.add_argument("--stt-model", default="saarika:v2.5")
     parser.add_argument("--tts-lang", default="en-IN")
     parser.add_argument("--tts-model", default="bulbul:v2")
     parser.add_argument("--speaker", default="anushka")
