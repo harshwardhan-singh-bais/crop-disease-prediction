@@ -1,5 +1,6 @@
 
 import argparse
+import base64
 import json
 import logging
 import os
@@ -8,11 +9,14 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from functools import lru_cache
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
+from intelligence_engine import IntelligenceEngine
+from model_loader import get_model
 from speech_router import speech_pipeline
 from voice_input import record_microphone_to_wav
 
@@ -27,14 +31,21 @@ def configure_logging(log_level: str) -> None:
 
 
 def _ensure_env_loaded() -> None:
-    if not os.getenv("SARVAM") and not os.getenv("SARVAM_API_KEY"):
-        load_dotenv()
+    load_dotenv()
+
+
+@lru_cache(maxsize=1)
+def get_intelligence_engine() -> IntelligenceEngine:
+    return IntelligenceEngine(protocols_path="disease_protocols.json")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging(os.getenv("LOG_LEVEL", "INFO"))
     _ensure_env_loaded()
+    logger.info("[APP] Warming up model and intelligence engine")
+    get_model()
+    get_intelligence_engine()
     logger.info("[APP] FastAPI app started")
     yield
 
@@ -44,8 +55,17 @@ app = FastAPI(title="Crop Disease Voice API", version="1.0.0", lifespan=lifespan
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Speech input pipeline for Sarvam STT/TTS (online) and Whisper STT (offline)."
+        description="Unified pipeline: run ML prediction locally or start voice pipeline."
     )
+    parser.add_argument(
+        "--pipeline",
+        default="ml",
+        choices=["ml", "voice"],
+        help="Which pipeline to run: 'ml' for disease prediction, 'voice' for speech interactions.",
+    )
+    parser.add_argument("--image", default="leaf.jpg", help="Input image for ML pipeline (default: leaf.jpg)")
+    parser.add_argument("--crop-area", type=float, default=1.0, help="Crop area in acres (default: 1.0)")
+    parser.add_argument("--market-price", type=float, default=1500.0, help="Market price Rs per quintal (default: 1500.0)")
     parser.add_argument("--audio", default=None, help="Input audio file path")
     parser.add_argument(
         "--input-source",
@@ -113,6 +133,52 @@ def prompt_for_interactive_config(args: argparse.Namespace) -> argparse.Namespac
     return args
 
 
+def run_ml_pipeline(args: argparse.Namespace) -> dict:
+    from intelligence_engine import print_intelligence_report
+
+    logger.info("[ML PIPELINE] Starting local ML execution")
+    _ensure_env_loaded()
+
+    image_path = args.image
+    if not os.path.exists(image_path):
+        logger.error(f"[ML PIPELINE] Request failed: Input image not found: {image_path}")
+        raise FileNotFoundError(f"Input image not found: {image_path}")
+
+    logger.info(f"[ML PIPELINE] Loading image: {image_path}")
+    with open(image_path, "rb") as f:
+        image_bytes = f.read()
+
+    logger.info("[ML PIPELINE] Warming up model (MobileNetV2)")
+    model = get_model()
+    
+    logger.info("[ML PIPELINE] Warming up intelligence engine")
+    engine = get_intelligence_engine()
+
+    logger.info("[ML PIPELINE] Layer 1: Running Model Inference...")
+    disease_key, confidence, top_k_predictions = model.predict(image_bytes, top_k=3)
+    logger.info(f"[ML PIPELINE] Model predicted: {disease_key} with confidence: {confidence*100:.1f}%")
+
+    logger.info("[ML PIPELINE] Layer 2: Validating Intelligence Engine rules...")
+    result = engine.analyze(
+        disease_key=disease_key,
+        confidence=confidence,
+        location=None,
+        crop_area_acres=args.crop_area,
+        market_price_rs_per_quintal=args.market_price,
+        top_k_predictions=top_k_predictions,
+    )
+
+    print_intelligence_report(result)
+    
+    print("\n" + "─"*65)
+    print("📦 RAW JSON PAYLOAD (for backend/DB):")
+    print("─"*65)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    result["status"] = "success"
+    return result
+
+
 def run_pipeline(args: argparse.Namespace) -> dict:
     logger.info("[BOOT] Loading environment variables from .env")
     _ensure_env_loaded()
@@ -162,6 +228,51 @@ def _save_upload_to_temp(upload: UploadFile) -> str:
         return temp_file.name
 
 
+def _decode_base64_image(image_base64: str) -> bytes:
+    payload = image_base64.strip()
+    if not payload:
+        raise HTTPException(status_code=400, detail="image_base64 is empty")
+
+    if "," in payload and payload.lower().startswith("data:"):
+        payload = payload.split(",", 1)[1].strip()
+
+    try:
+        return base64.b64decode(payload, validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid base64 image payload: {exc}") from exc
+
+
+def _build_prediction_response(
+    disease_key: str,
+    confidence: float,
+    top_k_predictions: list[dict],
+    text_input: str | None,
+    location_lat: float | None,
+    location_lon: float | None,
+    crop_area_acres: float,
+    market_price_rs_per_quintal: float,
+) -> dict:
+    engine = get_intelligence_engine()
+    location = None
+    if location_lat is not None and location_lon is not None:
+        location = (location_lat, location_lon)
+
+    result = engine.analyze(
+        disease_key=disease_key,
+        confidence=confidence,
+        location=location,
+        crop_area_acres=crop_area_acres,
+        market_price_rs_per_quintal=market_price_rs_per_quintal,
+        top_k_predictions=top_k_predictions,
+    )
+
+    result["speech_input"] = text_input
+    result["frontend_message"] = (
+        "Speech text received from frontend." if text_input else "No speech text provided."
+    )
+    return result
+
+
 @app.get("/health")
 def health() -> dict:
     return {
@@ -169,6 +280,55 @@ def health() -> dict:
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "sarvam_configured": bool(os.getenv("SARVAM") or os.getenv("SARVAM_API_KEY")),
     }
+
+
+@app.post("/predict")
+async def predict_leaf_disease(
+    file: UploadFile | None = File(default=None),
+    image_base64: str | None = Form(default=None),
+    text_input: str | None = Form(default=None),
+    location_lat: float | None = Form(default=None),
+    location_lon: float | None = Form(default=None),
+    crop_area_acres: float = Form(default=1.0),
+    market_price_rs_per_quintal: float = Form(default=1500.0),
+    top_k: int = Form(default=3),
+):
+    if file is None and not image_base64:
+        raise HTTPException(status_code=400, detail="Provide either file upload or image_base64")
+
+    if file is not None:
+        image_bytes = await file.read()
+        image_name = file.filename or "leaf.jpg"
+    else:
+        image_bytes = _decode_base64_image(image_base64 or "")
+        image_name = "leaf.jpg"
+
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Image payload is empty")
+
+    try:
+        plant_model = get_model()
+        disease_key, confidence, top_k_predictions = plant_model.predict(
+            image_bytes=image_bytes,
+            top_k=top_k,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid image or inference failed: {exc}") from exc
+
+    result = _build_prediction_response(
+        disease_key=disease_key,
+        confidence=confidence,
+        top_k_predictions=top_k_predictions,
+        text_input=text_input,
+        location_lat=location_lat,
+        location_lon=location_lon,
+        crop_area_acres=crop_area_acres,
+        market_price_rs_per_quintal=market_price_rs_per_quintal,
+    )
+
+    result["input_image_name"] = image_name
+    result["status"] = "success"
+    return JSONResponse(result)
 
 
 @app.post("/voice/pipeline")
@@ -309,13 +469,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     configure_logging(args.log_level)
 
-    logger.info("[START] Full voice pipeline execution started")
+    logger.info("[START] Unified pipeline execution started")
     logger.info("[START] Args=%s", vars(args))
 
     try:
-        result = run_pipeline(args)
-        print_final_report(result)
-        return 0 if result.get("status") == "success" else 1
+        if args.pipeline == "ml":
+            result = run_ml_pipeline(args)
+            return 0 if result.get("status") == "success" else 1
+        else:
+            result = run_pipeline(args)
+            print_final_report(result)
+            return 0 if result.get("status") == "success" else 1
     except Exception:
         logger.exception("[FATAL] Pipeline failed")
         return 1

@@ -39,6 +39,10 @@ SARVAM_TTS_PATH=/text-to-speech
 
 ### Endpoints
 
+- `POST /predict`:
+Leaf image upload or base64 image input → PyTorch `.pth` inference → intelligence engine JSON.
+Optional `text_input` can be sent from the Sarvam speech pipeline and echoed back in the response.
+
 - `POST /voice/stt`:
 Speech input file → text transcript.
 
@@ -60,6 +64,34 @@ curl -X POST "http://127.0.0.1:8000/voice/pipeline" \
   -F "tts_model=bulbul:v2" \
   -F "speaker=anushka"
 ```
+
+### Leaf Image Prediction for Flutter
+
+Send the leaf image to `/predict` as multipart form-data.
+
+```bash
+curl -X POST "http://127.0.0.1:8000/predict" \
+  -F "file=@leaf.jpg" \
+  -F "text_input=Symptom description from Sarvam STT" \
+  -F "location_lat=21.1458" \
+  -F "location_lon=79.0882" \
+  -F "crop_area_acres=2.0" \
+  -F "market_price_rs_per_quintal=1500"
+```
+
+You can also send `image_base64` instead of a file if Flutter prefers base64 upload.
+
+Response fields include:
+- `disease`
+- `disease_key`
+- `confidence`
+- `severity`
+- `first_aid`
+- `action_plan`
+- `marketplace`
+- `top_k_predictions`
+- `speech_input`
+- `frontend_message`
 
 ### Console Pipeline Testing (Online + Offline)
 
@@ -134,6 +166,17 @@ Notes:
 - Offline STT uses OpenAI Whisper. Ensure ffmpeg is installed in system PATH.
 - Online mode requires valid Sarvam credentials and internet.
 - In offline mode, TTS is skipped by design and reported in final JSON.
+
+### Simple Terminal Text-to-Speech (Bulbul)
+
+If you want to manually type text in terminal and generate speech using Sarvam Bulbul model:
+
+```bash
+python tts_terminal.py
+```
+
+It will ask for:
+- speaker name. If you type an invalid speaker, the script will prompt again or fall back to `anushka`.
 
 ---
 
