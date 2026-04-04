@@ -3,6 +3,7 @@ import argparse
 import base64
 import json
 import logging
+import mimetypes
 import os
 import tempfile
 import sys
@@ -468,6 +469,12 @@ def api_endpoints() -> dict:
                 "purpose": "Send transcript/context to Gemini chatbot",
             },
             {
+                "name": "chatbot_ask_with_disease",
+                "method": "POST",
+                "path": f"{API_PREFIX}/chatbot/ask-with-disease",
+                "purpose": "Disease JSON from /predict (or new image) + text or audio question → Gemini",
+            },
+            {
                 "name": "voice_chatbot_pipeline",
                 "method": "POST",
                 "path": f"{API_PREFIX}/voice/chatbot-pipeline",
@@ -496,6 +503,192 @@ def chatbot_reply_endpoint(payload: ChatbotRequest):
         return result
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Chatbot failed: {exc}") from exc
+
+
+@app.post("/chatbot/ask-with-disease")
+@app.post(f"{API_PREFIX}/chatbot/ask-with-disease")
+async def chatbot_ask_with_disease_context(
+    session_id: str = Form(default="api_session"),
+    disease_json: str | None = Form(
+        default=None,
+        description="JSON string from POST /predict (full response body). Ignored if `image` is sent.",
+    ),
+    question: str | None = Form(
+        default=None,
+        description="Farmer question in text. Omit if sending `audio` instead.",
+    ),
+    audio: UploadFile | None = File(
+        default=None,
+        description="Speech question; transcribed with same STT stack as /voice/stt.",
+    ),
+    image: UploadFile | None = File(
+        default=None,
+        description="Optional leaf image; if set, runs /predict first and uses that dict as context (overrides disease_json).",
+    ),
+    image_base64: str | None = Form(default=None),
+    stt_mode: str = Form(default="auto"),
+    stt_language_code: str = Form(default="en-IN"),
+    stt_model: str = Form(default="saarika:v2.5"),
+    whisper_model: str = Form(default="base"),
+    whisper_language: str | None = Form(default=None),
+    location_lat: float | None = Form(default=None),
+    location_lon: float | None = Form(default=None),
+    crop_area_acres: float = Form(default=1.0),
+    market_price_rs_per_quintal: float = Form(default=1500.0),
+    top_k: int = Form(default=3),
+    text_input_for_predict: str | None = Form(
+        default=None,
+        description="Optional note stored on predict result when using `image` (same as /predict text_input).",
+    ),
+):
+    """
+    Flow you described: disease JSON (from earlier image scan) + farmer question → Gemini.
+
+    - Context: send `disease_json` (stringified /predict output), **or** send `image` to run ML here.
+    - Question: `question` text and/or `audio` (STT). If both, audio transcript wins.
+    Uses `GEMINI_API_KEY` from `.env` (see `chatbot_engine` / `gemini_client`).
+    """
+    disease_ctx: dict | None = None
+
+    if image is not None:
+        image_bytes = await image.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Image file is empty")
+        try:
+            plant_model = get_model()
+            disease_key, confidence, top_k_predictions = plant_model.predict(
+                image_bytes=image_bytes,
+                top_k=top_k,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid image or inference failed: {exc}"
+            ) from exc
+        disease_ctx = _build_prediction_response(
+            disease_key=disease_key,
+            confidence=confidence,
+            top_k_predictions=top_k_predictions,
+            text_input=text_input_for_predict,
+            location_lat=location_lat,
+            location_lon=location_lon,
+            crop_area_acres=crop_area_acres,
+            market_price_rs_per_quintal=market_price_rs_per_quintal,
+        )
+        disease_ctx["input_image_name"] = image.filename or "leaf.jpg"
+        disease_ctx["status"] = "success"
+    elif disease_json is not None and disease_json.strip():
+        try:
+            parsed = json.loads(disease_json)
+            if not isinstance(parsed, dict):
+                raise ValueError("disease_json must be a JSON object")
+            disease_ctx = parsed
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid disease_json: {exc}"
+            ) from exc
+    elif image_base64 is not None and image_base64.strip():
+        try:
+            image_bytes = _decode_base64_image(image_base64)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid image_base64: {exc}"
+            ) from exc
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="image_base64 payload is empty")
+        try:
+            plant_model = get_model()
+            disease_key, confidence, top_k_predictions = plant_model.predict(
+                image_bytes=image_bytes,
+                top_k=top_k,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid image or inference failed: {exc}"
+            ) from exc
+        disease_ctx = _build_prediction_response(
+            disease_key=disease_key,
+            confidence=confidence,
+            top_k_predictions=top_k_predictions,
+            text_input=text_input_for_predict,
+            location_lat=location_lat,
+            location_lon=location_lon,
+            crop_area_acres=crop_area_acres,
+            market_price_rs_per_quintal=market_price_rs_per_quintal,
+        )
+        disease_ctx["input_image_name"] = "leaf.jpg"
+        disease_ctx["status"] = "success"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide disease_json (string), or upload image, or image_base64",
+        )
+
+    user_q = (question or "").strip()
+    stt_meta: dict | None = None
+
+    if audio is not None:
+        temp_audio = _save_upload_to_temp(audio)
+        try:
+            _ensure_env_loaded()
+            sarvam_client = SarvamClient.from_env()
+            stt_result = transcribe_audio(
+                file_path=temp_audio,
+                mode=stt_mode,
+                sarvam_client=sarvam_client,
+                stt_language_code=stt_language_code,
+                stt_model=stt_model,
+                whisper_model_size=whisper_model,
+                whisper_language_hint=whisper_language,
+            )
+            stt_meta = {
+                "mode": stt_result.get("mode"),
+                "provider": stt_result.get("provider"),
+                "error": stt_result.get("error"),
+            }
+            if stt_result.get("error"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"STT failed: {stt_result.get('error')}",
+                )
+            transcript = (stt_result.get("transcript") or "").strip()
+            if not transcript:
+                raise HTTPException(status_code=400, detail="STT transcript is empty")
+            user_q = transcript
+        finally:
+            try:
+                os.remove(temp_audio)
+            except OSError:
+                pass
+
+    if not user_q:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide question (text) and/or audio with speech",
+        )
+
+    try:
+        from chatbot_engine import chatbot_reply
+
+        chat = chatbot_reply(session_id, user_q, disease_ctx)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gemini chatbot failed: {exc}") from exc
+
+    return JSONResponse(
+        {
+            "status": "success",
+            "session_id": chat["session_id"],
+            "reply": chat["reply"],
+            "language": chat.get("language", "auto"),
+            "question_used": user_q,
+            "used_audio": audio is not None,
+            "stt": stt_meta,
+            "had_image_predict": image is not None or bool(
+                image_base64 and str(image_base64).strip()
+            ),
+        }
+    )
 
 
 @app.post("/predict")
@@ -562,11 +755,14 @@ async def voice_pipeline(
     whisper_language: str | None = Form(default=None),
 ):
     temp_path = _save_upload_to_temp(file)
+    out_dir = _ensure_downloads_dir()
+    output_file = out_dir / f"voice_pipeline_{uuid4().hex}.wav"
     try:
         result = run_speech_pipeline(
             audio_input_path=temp_path,
             mode=mode,
             enable_tts=True,
+            output_audio_path=str(output_file),
             stt_language_code=stt_language_code,
             stt_model=stt_model,
             tts_language_code=tts_language_code,
@@ -575,7 +771,13 @@ async def voice_pipeline(
             whisper_model_size=whisper_model,
             whisper_language_hint=whisper_language,
         )
-        return JSONResponse(result)
+        payload = dict(result)
+        final_audio = payload.get("audio_path")
+        if final_audio and os.path.exists(final_audio):
+            safe_name = Path(final_audio).name
+            payload["audio_download_url"] = f"{API_PREFIX}/voice/download/{safe_name}"
+            payload["audio_file"] = safe_name
+        return JSONResponse(payload)
     finally:
         try:
             os.remove(temp_path)
@@ -635,14 +837,18 @@ async def voice_chatbot_pipeline(
         if tts_result.get("error"):
             raise HTTPException(status_code=500, detail=tts_result.get("error"))
 
+        tts_path = tts_result.get("audio_path")
+        if not tts_path or not os.path.exists(tts_path):
+            raise HTTPException(status_code=500, detail="TTS output file missing")
+        tts_name = Path(tts_path).name
         return JSONResponse(
             {
                 "status": "success",
                 "session_id": session_id,
                 "transcript": transcript,
                 "chatbot_reply": reply_text,
-                "audio_download_url": f"/voice/download/{output_file.name}",
-                "audio_file": output_file.name,
+                "audio_download_url": f"{API_PREFIX}/voice/download/{tts_name}",
+                "audio_file": tts_name,
             }
         )
     finally:
@@ -662,7 +868,11 @@ def download_voice_file(filename: str):
         raise HTTPException(status_code=400, detail="Invalid filename")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Audio file not found")
-    return FileResponse(path=str(file_path), filename=safe_name, media_type="audio/wav")
+    guessed, _ = mimetypes.guess_type(safe_name)
+    media_type = guessed or "application/octet-stream"
+    return FileResponse(
+        path=str(file_path), filename=safe_name, media_type=media_type
+    )
 
 
 @app.post("/voice/stt")

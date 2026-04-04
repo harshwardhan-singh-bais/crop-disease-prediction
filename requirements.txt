@@ -1,3 +1,8 @@
+# PyTorch wheels: use standard Windows CPython (python.org), not MSYS2/MinGW/UCRT64
+# Python — PyTorch has no wheels for mingw*; "versions: none" there is expected.
+# Official CPython 3.13+ also needs this extra index (CPU builds):
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-multipart>=0.0.9
