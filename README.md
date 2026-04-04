@@ -39,6 +39,22 @@ SARVAM_TTS_PATH=/text-to-speech
 
 ### Endpoints
 
+The frontend team should use the versioned API prefix:
+
+- Base: `/api/v1`
+
+Endpoint map:
+
+- `GET /api/v1/health`
+- `GET /api/v1/endpoints`
+- `POST /api/v1/predict`
+- `POST /api/v1/voice/stt`
+- `POST /api/v1/voice/tts`
+- `POST /api/v1/voice/pipeline`
+- `POST /api/v1/chatbot/reply`
+- `POST /api/v1/voice/chatbot-pipeline`
+- `GET /api/v1/voice/download/{filename}`
+
 - `POST /predict`:
 Leaf image upload or base64 image input → PyTorch `.pth` inference → intelligence engine JSON.
 Optional `text_input` can be sent from the Sarvam speech pipeline and echoed back in the response.
@@ -99,10 +115,21 @@ Response fields include:
 - `speech_input`
 - `frontend_message`
 
+Suggested Flutter flow for the image branch:
+1. Upload leaf image to `POST /api/v1/predict`
+2. Render returned JSON in UI
+3. If you also have speech text from another branch, include `text_input`
+
+Suggested Flutter flow for the speech + chatbot branch:
+1. Send audio to `POST /api/v1/voice/chatbot-pipeline`
+2. Read `transcript` and `chatbot_reply`
+3. Download audio from `audio_download_url`
+4. Play the WAV file in the app
+
 ### Chatbot Voice Pipeline (STT -> Chatbot -> TTS)
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/voice/chatbot-pipeline" \
+curl -X POST "http://127.0.0.1:8000/api/v1/voice/chatbot-pipeline" \
   -F "file=@input.wav" \
   -F "session_id=farmer_001" \
   -F "disease_json={\"disease\":\"Tomato Late Blight\",\"crop\":\"Tomato\"}" \
@@ -121,7 +148,7 @@ The response includes:
 Then download audio:
 
 ```bash
-curl -L "http://127.0.0.1:8000/voice/download/<audio_file_name>.wav" --output chatbot_reply.wav
+curl -L "http://127.0.0.1:8000/api/v1/voice/download/<audio_file_name>.wav" --output chatbot_reply.wav
 ```
 
 ### Console Pipeline Testing (Online + Offline)

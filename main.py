@@ -28,6 +28,7 @@ from voice_input import record_microphone_to_wav
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 logger = logging.getLogger("Main")
 DOWNLOADS_DIR = Path("downloads")
+API_PREFIX = "/api/v1"
 
 
 def configure_logging(log_level: str) -> None:
@@ -413,6 +414,7 @@ def _build_prediction_response(
 
 
 @app.get("/health")
+@app.get(f"{API_PREFIX}/health")
 def health() -> dict:
     return {
         "status": "ok",
@@ -421,7 +423,68 @@ def health() -> dict:
     }
 
 
+@app.get("/endpoints")
+@app.get(f"{API_PREFIX}/endpoints")
+def api_endpoints() -> dict:
+    return {
+        "status": "ok",
+        "base_prefix": API_PREFIX,
+        "endpoints": [
+            {
+                "name": "health",
+                "method": "GET",
+                "path": f"{API_PREFIX}/health",
+                "purpose": "Check server status and environment configuration",
+            },
+            {
+                "name": "ml_predict",
+                "method": "POST",
+                "path": f"{API_PREFIX}/predict",
+                "purpose": "Upload leaf image and get disease JSON output",
+                "inputs": ["file OR image_base64", "text_input optional", "location optional"],
+            },
+            {
+                "name": "voice_stt",
+                "method": "POST",
+                "path": f"{API_PREFIX}/voice/stt",
+                "purpose": "Speech file to transcript only",
+            },
+            {
+                "name": "voice_tts",
+                "method": "POST",
+                "path": f"{API_PREFIX}/voice/tts",
+                "purpose": "Text to Sarvam TTS audio file",
+            },
+            {
+                "name": "voice_pipeline",
+                "method": "POST",
+                "path": f"{API_PREFIX}/voice/pipeline",
+                "purpose": "Speech to transcript to TTS (no chatbot)",
+            },
+            {
+                "name": "chatbot_reply",
+                "method": "POST",
+                "path": f"{API_PREFIX}/chatbot/reply",
+                "purpose": "Send transcript/context to Gemini chatbot",
+            },
+            {
+                "name": "voice_chatbot_pipeline",
+                "method": "POST",
+                "path": f"{API_PREFIX}/voice/chatbot-pipeline",
+                "purpose": "Speech to STT -> chatbot -> TTS -> downloadable audio",
+            },
+            {
+                "name": "voice_download",
+                "method": "GET",
+                "path": f"{API_PREFIX}/voice/download/{{filename}}",
+                "purpose": "Download generated TTS WAV file",
+            },
+        ],
+    }
+
+
 @app.post("/chatbot/reply", response_model=ChatbotResponse)
+@app.post(f"{API_PREFIX}/chatbot/reply", response_model=ChatbotResponse)
 def chatbot_reply_endpoint(payload: ChatbotRequest):
     try:
         from chatbot_engine import chatbot_reply
@@ -436,6 +499,7 @@ def chatbot_reply_endpoint(payload: ChatbotRequest):
 
 
 @app.post("/predict")
+@app.post(f"{API_PREFIX}/predict")
 async def predict_leaf_disease(
     file: UploadFile | None = File(default=None),
     image_base64: str | None = Form(default=None),
@@ -485,6 +549,7 @@ async def predict_leaf_disease(
 
 
 @app.post("/voice/pipeline")
+@app.post(f"{API_PREFIX}/voice/pipeline")
 async def voice_pipeline(
     file: UploadFile = File(...),
     mode: str = Form(default="auto"),
@@ -519,6 +584,7 @@ async def voice_pipeline(
 
 
 @app.post("/voice/chatbot-pipeline")
+@app.post(f"{API_PREFIX}/voice/chatbot-pipeline")
 async def voice_chatbot_pipeline(
     file: UploadFile = File(...),
     session_id: str = Form(default="api_session"),
@@ -587,6 +653,7 @@ async def voice_chatbot_pipeline(
 
 
 @app.get("/voice/download/{filename}")
+@app.get(f"{API_PREFIX}/voice/download/{{filename}}")
 def download_voice_file(filename: str):
     safe_name = Path(filename).name
     file_path = (_ensure_downloads_dir() / safe_name).resolve()
@@ -599,6 +666,7 @@ def download_voice_file(filename: str):
 
 
 @app.post("/voice/stt")
+@app.post(f"{API_PREFIX}/voice/stt")
 async def voice_stt(
     file: UploadFile = File(...),
     mode: str = Form(default="auto"),
@@ -636,6 +704,7 @@ async def voice_stt(
 
 
 @app.post("/voice/tts")
+@app.post(f"{API_PREFIX}/voice/tts")
 async def voice_tts(
     text: str = Form(...),
     tts_language_code: str = Form(default="en-IN"),
