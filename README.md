@@ -53,6 +53,12 @@ Text input → speech output (`audio_base64` + MIME type).
 Speech input → STT transcript → final text → TTS audio.
 If `final_text` is not passed, transcript is spoken directly.
 
+- `POST /voice/chatbot-pipeline`:
+Speech input file -> Sarvam STT -> Gemini chatbot reply -> Sarvam TTS -> downloadable audio URL.
+
+- `GET /voice/download/{filename}`:
+Download generated chatbot TTS audio file.
+
 ### Example (combined pipeline)
 
 ```bash
@@ -92,6 +98,31 @@ Response fields include:
 - `top_k_predictions`
 - `speech_input`
 - `frontend_message`
+
+### Chatbot Voice Pipeline (STT -> Chatbot -> TTS)
+
+```bash
+curl -X POST "http://127.0.0.1:8000/voice/chatbot-pipeline" \
+  -F "file=@input.wav" \
+  -F "session_id=farmer_001" \
+  -F "disease_json={\"disease\":\"Tomato Late Blight\",\"crop\":\"Tomato\"}" \
+  -F "stt_language_code=en-IN" \
+  -F "stt_model=saarika:v2.5" \
+  -F "tts_language_code=en-IN" \
+  -F "tts_model=bulbul:v2" \
+  -F "speaker=anushka"
+```
+
+The response includes:
+- `transcript`
+- `chatbot_reply`
+- `audio_download_url`
+
+Then download audio:
+
+```bash
+curl -L "http://127.0.0.1:8000/voice/download/<audio_file_name>.wav" --output chatbot_reply.wav
+```
 
 ### Console Pipeline Testing (Online + Offline)
 
@@ -146,6 +177,7 @@ python main.py
 ```
 
 You will be asked to choose:
+- pipeline: `image` or `speech`
 - input source: `mic` or `file`
 - mode: `online`, `offline`, or `auto`
 - recording duration if `mic` is selected

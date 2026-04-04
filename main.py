@@ -10,18 +10,24 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from functools import lru_cache
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
 
 from intelligence_engine import IntelligenceEngine
 from model_loader import get_model
-from speech_router import speech_pipeline
+from sarvam_client import SarvamClient
+from speech_router import speech_pipeline as run_speech_pipeline
+from stt import transcribe_audio
+from tts import generate_speech
 from voice_input import record_microphone_to_wav
 
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 logger = logging.getLogger("Main")
+DOWNLOADS_DIR = Path("downloads")
 
 
 def configure_logging(log_level: str) -> None:
@@ -53,20 +59,34 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Crop Disease Voice API", version="1.0.0", lifespan=lifespan)
 
 
+class ChatbotRequest(BaseModel):
+    session_id: str = Field(..., min_length=1)
+    user_input: str = Field(..., min_length=1)
+    disease_json: dict = Field(default_factory=dict)
+
+
+class ChatbotResponse(BaseModel):
+    reply: str
+    language: str
+    session_id: str
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Unified pipeline: run ML prediction locally or start voice pipeline."
     )
     parser.add_argument(
         "--pipeline",
-        default="ml",
-        choices=["ml", "voice"],
-        help="Which pipeline to run: 'ml' for disease prediction, 'voice' for speech interactions.",
+        default="prompt",
+        choices=["prompt", "ml", "voice", "speech", "chatbot"],
+        help="Which pipeline to run: image ML pipeline or speech chatbot pipeline.",
     )
     parser.add_argument("--image", default="leaf.jpg", help="Input image for ML pipeline (default: leaf.jpg)")
     parser.add_argument("--crop-area", type=float, default=1.0, help="Crop area in acres (default: 1.0)")
     parser.add_argument("--market-price", type=float, default=1500.0, help="Market price Rs per quintal (default: 1500.0)")
     parser.add_argument("--audio", default=None, help="Input audio file path")
+    parser.add_argument("--session-id", default="local_session", help="Chatbot session id")
+    parser.add_argument("--disease-json", default=None, help="Optional disease JSON string for chatbot context")
     parser.add_argument(
         "--input-source",
         default="prompt",
@@ -131,6 +151,125 @@ def prompt_for_interactive_config(args: argparse.Namespace) -> argparse.Namespac
     args.stt_only = stt_only_answer.lower().startswith("y")
 
     return args
+
+
+def prompt_for_pipeline_choice(args: argparse.Namespace) -> argparse.Namespace:
+    if args.pipeline == "prompt":
+        choice = _prompt_with_default("Choose pipeline (image/speech)", "image").lower()
+        args.pipeline = "ml" if choice in {"image", "ml"} else "chatbot"
+    return args
+
+
+def _parse_disease_json(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("disease_json must be a JSON object")
+        return parsed
+    except Exception as exc:
+        raise ValueError(f"Invalid --disease-json: {exc}") from exc
+
+
+def _ensure_downloads_dir() -> Path:
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    return DOWNLOADS_DIR
+
+
+def run_chatbot_voice_pipeline(args: argparse.Namespace) -> dict:
+    logger.info("[CHATBOT VOICE] Starting STT -> Chatbot -> TTS pipeline")
+    _ensure_env_loaded()
+
+    if args.mode == "prompt" or args.input_source == "prompt":
+        args = prompt_for_interactive_config(args)
+
+    if args.input_source == "mic":
+        logger.info("[CHATBOT VOICE] Recording speech from microphone")
+        args.audio = record_microphone_to_wav(
+            output_path=args.audio or "input.wav",
+            duration_seconds=args.record_seconds,
+            sample_rate=args.sample_rate,
+        )
+
+    if not args.audio:
+        raise ValueError("No audio input provided. Use --audio, --input-source file, or --input-source mic.")
+    if not os.path.exists(args.audio):
+        raise FileNotFoundError(f"Input audio file not found: {args.audio}")
+
+    sarvam_client = SarvamClient.from_env()
+    if sarvam_client is None:
+        raise RuntimeError("Sarvam client is not configured. Set SARVAM or SARVAM_API_KEY in .env")
+
+    stt_mode = args.mode if args.mode != "prompt" else "online"
+    stt_result = transcribe_audio(
+        file_path=args.audio,
+        mode=stt_mode,
+        sarvam_client=sarvam_client,
+        stt_language_code=args.stt_lang,
+        stt_model=args.stt_model,
+        whisper_model_size=args.whisper_model,
+        whisper_language_hint=args.whisper_language,
+    )
+    if stt_result.get("error"):
+        return {
+            "status": "error",
+            "stage": "stt",
+            "error": stt_result.get("error"),
+            "stt": stt_result,
+        }
+
+    transcript = stt_result.get("transcript", "")
+    if not transcript.strip():
+        return {
+            "status": "error",
+            "stage": "stt",
+            "error": "Empty transcript from STT",
+            "stt": stt_result,
+        }
+
+    from chatbot_engine import chatbot_reply
+    disease_context = _parse_disease_json(args.disease_json)
+    chat = chatbot_reply(args.session_id, transcript, disease_context)
+    reply_text = chat.get("reply", "").strip()
+    if not reply_text:
+        return {
+            "status": "error",
+            "stage": "chatbot",
+            "error": "Chatbot returned empty response",
+            "stt": stt_result,
+        }
+
+    out_dir = _ensure_downloads_dir()
+    output_file = out_dir / f"chatbot_tts_{uuid4().hex}.wav"
+    tts_result = generate_speech(
+        text=reply_text,
+        output_path=str(output_file),
+        sarvam_client=sarvam_client,
+        tts_language_code=args.tts_lang,
+        tts_model=args.tts_model,
+        tts_speaker=args.speaker,
+    )
+    if tts_result.get("error"):
+        return {
+            "status": "error",
+            "stage": "tts",
+            "error": tts_result.get("error"),
+            "stt": stt_result,
+            "chatbot_reply": reply_text,
+        }
+
+    return {
+        "status": "success",
+        "stage": "complete",
+        "session_id": args.session_id,
+        "transcript": transcript,
+        "chatbot_reply": reply_text,
+        "stt": stt_result,
+        "tts": tts_result,
+        "audio_download_url": f"/voice/download/{output_file.name}",
+        "audio_file": output_file.name,
+    }
 
 
 def run_ml_pipeline(args: argparse.Namespace) -> dict:
@@ -204,7 +343,7 @@ def run_pipeline(args: argparse.Namespace) -> dict:
     logger.info("[CHECK] Requested mode=%s", args.mode)
     logger.info("[CHECK] Sarvam key present=%s", bool(os.getenv("SARVAM") or os.getenv("SARVAM_API_KEY")))
 
-    result = speech_pipeline(
+    result = run_speech_pipeline(
         audio_input_path=args.audio,
         mode=args.mode,
         output_audio_path=args.output_audio,
@@ -282,6 +421,20 @@ def health() -> dict:
     }
 
 
+@app.post("/chatbot/reply", response_model=ChatbotResponse)
+def chatbot_reply_endpoint(payload: ChatbotRequest):
+    try:
+        from chatbot_engine import chatbot_reply
+        result = chatbot_reply(
+            session_id=payload.session_id,
+            user_input=payload.user_input,
+            disease_json=payload.disease_json,
+        )
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Chatbot failed: {exc}") from exc
+
+
 @app.post("/predict")
 async def predict_leaf_disease(
     file: UploadFile | None = File(default=None),
@@ -345,7 +498,7 @@ async def voice_pipeline(
 ):
     temp_path = _save_upload_to_temp(file)
     try:
-        result = speech_pipeline(
+        result = run_speech_pipeline(
             audio_input_path=temp_path,
             mode=mode,
             enable_tts=True,
@@ -365,6 +518,86 @@ async def voice_pipeline(
             pass
 
 
+@app.post("/voice/chatbot-pipeline")
+async def voice_chatbot_pipeline(
+    file: UploadFile = File(...),
+    session_id: str = Form(default="api_session"),
+    disease_json: str | None = Form(default=None),
+    stt_language_code: str = Form(default="en-IN"),
+    stt_model: str = Form(default="saarika:v2.5"),
+    tts_language_code: str = Form(default="en-IN"),
+    tts_model: str = Form(default="bulbul:v2"),
+    speaker: str = Form(default="anushka"),
+):
+    _ensure_env_loaded()
+    temp_path = _save_upload_to_temp(file)
+    try:
+        sarvam_client = SarvamClient.from_env()
+        if sarvam_client is None:
+            raise HTTPException(status_code=400, detail="Sarvam client is not configured")
+
+        stt_result = transcribe_audio(
+            file_path=temp_path,
+            mode="online",
+            sarvam_client=sarvam_client,
+            stt_language_code=stt_language_code,
+            stt_model=stt_model,
+        )
+        if stt_result.get("error"):
+            raise HTTPException(status_code=400, detail=stt_result.get("error"))
+
+        transcript = stt_result.get("transcript", "").strip()
+        if not transcript:
+            raise HTTPException(status_code=400, detail="STT transcript is empty")
+
+        from chatbot_engine import chatbot_reply
+        chat = chatbot_reply(session_id, transcript, _parse_disease_json(disease_json))
+        reply_text = (chat.get("reply") or "").strip()
+        if not reply_text:
+            raise HTTPException(status_code=500, detail="Chatbot returned empty response")
+
+        out_dir = _ensure_downloads_dir()
+        output_file = out_dir / f"chatbot_tts_{uuid4().hex}.wav"
+        tts_result = generate_speech(
+            text=reply_text,
+            output_path=str(output_file),
+            sarvam_client=sarvam_client,
+            tts_language_code=tts_language_code,
+            tts_model=tts_model,
+            tts_speaker=speaker,
+        )
+        if tts_result.get("error"):
+            raise HTTPException(status_code=500, detail=tts_result.get("error"))
+
+        return JSONResponse(
+            {
+                "status": "success",
+                "session_id": session_id,
+                "transcript": transcript,
+                "chatbot_reply": reply_text,
+                "audio_download_url": f"/voice/download/{output_file.name}",
+                "audio_file": output_file.name,
+            }
+        )
+    finally:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+
+
+@app.get("/voice/download/{filename}")
+def download_voice_file(filename: str):
+    safe_name = Path(filename).name
+    file_path = (_ensure_downloads_dir() / safe_name).resolve()
+    downloads_root = _ensure_downloads_dir().resolve()
+    if downloads_root not in file_path.parents and file_path != downloads_root:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    return FileResponse(path=str(file_path), filename=safe_name, media_type="audio/wav")
+
+
 @app.post("/voice/stt")
 async def voice_stt(
     file: UploadFile = File(...),
@@ -376,7 +609,7 @@ async def voice_stt(
 ):
     temp_path = _save_upload_to_temp(file)
     try:
-        result = speech_pipeline(
+        result = run_speech_pipeline(
             audio_input_path=temp_path,
             mode=mode,
             enable_tts=False,
@@ -468,6 +701,7 @@ def print_final_report(result: dict) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     configure_logging(args.log_level)
+    args = prompt_for_pipeline_choice(args)
 
     logger.info("[START] Unified pipeline execution started")
     logger.info("[START] Args=%s", vars(args))
@@ -475,6 +709,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.pipeline == "ml":
             result = run_ml_pipeline(args)
+            return 0 if result.get("status") == "success" else 1
+        if args.pipeline in {"speech", "chatbot", "voice"}:
+            result = run_chatbot_voice_pipeline(args)
+            print("\n" + "=" * 90)
+            print("CHATBOT VOICE PIPELINE REPORT")
+            print("=" * 90)
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            print("=" * 90 + "\n")
             return 0 if result.get("status") == "success" else 1
         else:
             result = run_pipeline(args)
