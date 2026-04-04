@@ -7,6 +7,18 @@ from sarvam_client import SarvamClient, SarvamClientError
 logger = logging.getLogger("TTS")
 
 
+def _extension_for_mime(mime: str) -> str:
+    """Pick a file suffix so players decode correctly (Sarvam often returns MP3 as audio/mpeg)."""
+    main = (mime or "").split(";")[0].strip().lower()
+    if main in ("audio/mpeg", "audio/mp3", "audio/x-mpeg"):
+        return ".mp3"
+    if main in ("audio/wav", "audio/x-wav", "audio/wave"):
+        return ".wav"
+    if main in ("audio/ogg", "audio/opus"):
+        return ".ogg"
+    return ".mp3"
+
+
 def generate_speech(
     text: str,
     output_path: str,
@@ -58,6 +70,15 @@ def generate_speech(
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         with open(output_path, "wb") as f:
             f.write(audio_bytes)
+
+        root, _old_ext = os.path.splitext(output_path)
+        correct_path = root + _extension_for_mime(mime_type)
+        if correct_path != output_path and os.path.exists(output_path):
+            try:
+                os.replace(output_path, correct_path)
+                output_path = correct_path
+            except OSError:
+                logger.warning("[TTS] Could not rename output to %s", correct_path)
 
         logger.info(
             "[TTS/ONLINE] Audio generated: %s bytes written to %s",

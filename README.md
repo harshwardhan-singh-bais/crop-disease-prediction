@@ -28,6 +28,16 @@ crop disease/
 
 If you are running the backend (`main.py`), voice APIs are now available.
 
+### Listen on your LAN (phones / Flutter on device)
+
+By default, `uvicorn` may bind only to **127.0.0.1**, so requests from another device (e.g. `http://192.168.x.x:8000`) will **time out**. Start with:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Allow **port 8000** through the PC firewall if needed. The Flutter app’s `BASE_URL` should be `http://<this-machine-LAN-IP>:8000`.
+
 ### Required `.env`
 
 ```env
